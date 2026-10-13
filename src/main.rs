@@ -1,4 +1,10 @@
 #![allow(dead_code)]
+pub mod event;
+pub mod csv_out;
+pub mod utils;
+pub mod parsers;
+pub mod ingest;
+
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -27,7 +33,7 @@ struct Persistence {
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
-#[derive(Clone, ValueEnum, Debug)]
+#[derive(Clone, ValueEnum, Debug, PartialEq)]
 enum Action {
     All,
     GetRun,
@@ -61,20 +67,46 @@ enum Action {
     GetScreensaver,
     GetSilentProcessExit,
     GetComHijacking,
+    GetPrintMonitors,
+    GetTimeProviders,
+    GetNetshHelperDlls,
+    GetPowerShellProfiles,
+    GetLinuxPersistence,
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "faramir", version = "0.1", about = "Extract artifacts related with persistence")]
+#[command(
+    name = "faramir",
+    version = "0.2.0",
+    about = "Forensic persistence hunting tool for Windows and Linux triage, images (E01/RAW/ZIP) and offline filesystems"
+)]
 struct Args {
-    /// Directory where the Windows machine was mounted
-    #[arg(long)]
+    /// Directory or drive to process (mounted volume, folder, etc.)
+    #[arg(short = 'd', long = "directory", value_name = "DIR")]
+    directory: Vec<String>,
+
+    /// Individual files to process (disk images: .E01, .raw, .dd; archives: .zip, .tar.gz; hives)
+    #[arg(short = 'f', long = "file", value_name = "FILE")]
+    file: Vec<String>,
+
+    /// Output CSV file path
+    #[arg(short = 'o', long = "output", value_name = "OUTPUT")]
+    output: Option<PathBuf>,
+
+    /// Legacy flag: Directory where the Windows/Linux machine was mounted
+    #[arg(long = "source-evidence")]
     source_evidence: Option<PathBuf>,
 
-    /// Output CSV file path prefix
-    #[arg(long)]
+    /// Legacy flag: Output CSV file path prefix
+    #[arg(long = "csv-output")]
     csv_output: Option<PathBuf>,
 
+    /// Suppress verbose logging
+    #[arg(long = "silent")]
+    silent: bool,
+
     /// Action to perform
+    #[arg(default_value = "all")]
     action: Action,
 }
 
@@ -163,7 +195,6 @@ macro_rules! with_key {
 }
 
 fn get_hives(source: &Path) -> Vec<PathBuf> {
-    println!("+ Getting hives...");
     let system_hive_names = ["SYSTEM", "SOFTWARE", "SAM", "SECURITY", "DEFAULT"];
     let mut hives = Vec::new();
 
@@ -173,7 +204,7 @@ fn get_hives(source: &Path) -> Vec<PathBuf> {
             continue;
         }
         let name = entry.file_name().to_string_lossy().to_uppercase();
-        if system_hive_names.iter().any(|h| *h == name.as_str())
+        if system_hive_names.contains(&name.as_str())
             || name.starts_with("NTUSER")
         {
             println!("\t{}", path.display());
@@ -181,9 +212,6 @@ fn get_hives(source: &Path) -> Vec<PathBuf> {
         }
     }
 
-    if hives.is_empty() {
-        println!("No registry hives found.");
-    }
     hives
 }
 
@@ -946,7 +974,6 @@ fn get_scheduled_tasks(hives: &[PathBuf], source_evidence: Option<&Path>) -> Vec
                 continue;
             }
             {
-                let path = path;
                 let Ok(content) = std::fs::read_to_string(path) else {
                     continue;
                 };
@@ -1446,6 +1473,175 @@ fn get_com_hijacking(hives: &[PathBuf]) -> Vec<Persistence> {
     result
 }
 
+fn get_print_monitors(hives: &[PathBuf]) -> Vec<Persistence> {
+    println!("+ Getting Print Monitors.");
+    let standard_monitors = [
+        "Local Port",
+        "Standard TCP/IP Port",
+        "USB Monitor",
+        "WSD Port",
+        "Microsoft Shared Fax Monitor",
+    ];
+    let mut result = Vec::new();
+    for hive_path in hives {
+        if let Some(mut hive) = open_hive(hive_path) {
+            let Ok(root) = hive.root_key_node() else { continue };
+            let current = get_current_control_set(&root, &mut hive).unwrap_or(1);
+            let mon_path = format!(r"ControlSet{current:03}\Control\Print\Monitors");
+            let Ok(Some(mon_rc)) = root.subpath(mon_path.as_str(), &mut hive) else {
+                continue;
+            };
+            let mon_key = mon_rc.borrow();
+            let Ok(subkeys) = mon_key.subkeys(&mut hive) else { continue };
+            for sub_rc in subkeys.iter() {
+                let sub = sub_rc.borrow();
+                let name = sub.name();
+                if standard_monitors.iter().any(|&s| s.eq_ignore_ascii_case(name)) {
+                    continue;
+                }
+                let ts = fmt_ts(sub.timestamp());
+                let driver = sub
+                    .values()
+                    .iter()
+                    .find(|v| v.name().eq_ignore_ascii_case("Driver"))
+                    .and_then(|v| {
+                        if let RegistryValue::RegSZ(s) | RegistryValue::RegExpandSZ(s) = v.value() {
+                            Some(s.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| name.to_string());
+
+                println!("\t{name} -> {driver}");
+                result.push(Persistence {
+                    timestamp: ts,
+                    path: format!(r"SYSTEM\ControlSet{current:03}\Control\Print\Monitors\{name}"),
+                    access_gained: "System".to_string(),
+                    technique: "Print Monitor DLL".to_string(),
+                    value: driver,
+                });
+            }
+        }
+    }
+    result
+}
+
+fn get_time_providers(hives: &[PathBuf]) -> Vec<Persistence> {
+    println!("+ Getting W32Time Time Providers.");
+    let standard_dlls = ["w32time.dll", "vmictimeprovider.dll"];
+    let mut result = Vec::new();
+    for hive_path in hives {
+        if let Some(mut hive) = open_hive(hive_path) {
+            let Ok(root) = hive.root_key_node() else { continue };
+            let current = get_current_control_set(&root, &mut hive).unwrap_or(1);
+            let tp_path = format!(r"ControlSet{current:03}\Services\W32Time\TimeProviders");
+            let Ok(Some(tp_rc)) = root.subpath(tp_path.as_str(), &mut hive) else {
+                continue;
+            };
+            let tp_key = tp_rc.borrow();
+            let Ok(subkeys) = tp_key.subkeys(&mut hive) else { continue };
+            for sub_rc in subkeys.iter() {
+                let sub = sub_rc.borrow();
+                let name = sub.name();
+                let ts = fmt_ts(sub.timestamp());
+                let dll = sub
+                    .values()
+                    .iter()
+                    .find(|v| v.name().eq_ignore_ascii_case("DllName"))
+                    .and_then(|v| {
+                        if let RegistryValue::RegSZ(s) | RegistryValue::RegExpandSZ(s) = v.value() {
+                            Some(s.clone())
+                        } else {
+                            None
+                        }
+                    });
+
+                if let Some(dll_name) = dll {
+                    let is_standard = standard_dlls.iter().any(|&s| dll_name.to_lowercase().ends_with(s));
+                    if !is_standard {
+                        println!("\t{name} -> {dll_name}");
+                        result.push(Persistence {
+                            timestamp: ts,
+                            path: format!(r"SYSTEM\ControlSet{current:03}\Services\W32Time\TimeProviders\{name}"),
+                            access_gained: "System".to_string(),
+                            technique: "Time Provider DLL".to_string(),
+                            value: dll_name,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    result
+}
+
+fn get_netsh_helper_dlls(hives: &[PathBuf]) -> Vec<Persistence> {
+    println!("+ Getting Netsh Helper DLLs.");
+    let mut result = Vec::new();
+    for hive_path in hives {
+        result.extend(with_key!(
+            hive_path,
+            r"SOFTWARE\Microsoft\NetSh",
+            |key, _hive| {
+                key.values()
+                    .iter()
+                    .filter_map(|v| {
+                        if let RegistryValue::RegSZ(s) | RegistryValue::RegExpandSZ(s) = v.value() {
+                            println!("\t{} -> {s}", v.name());
+                            Some(Persistence {
+                                timestamp: fmt_ts(key.timestamp()),
+                                path: format!(r"SOFTWARE\Microsoft\NetSh\{}", v.name()),
+                                access_gained: "System".to_string(),
+                                technique: "Netsh Helper DLL".to_string(),
+                                value: s.clone(),
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            }
+        ));
+    }
+    result
+}
+
+fn get_powershell_profiles(source: &Path) -> Vec<Persistence> {
+    println!("+ Checking for PowerShell Profile scripts...");
+    let mut result = Vec::new();
+
+    for entry in WalkDir::new(source).into_iter().flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let fname = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+        if fname.ends_with("profile.ps1") {
+            let ts = path
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| {
+                    let secs = t.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64;
+                    chrono::DateTime::from_timestamp(secs, 0)
+                })
+                .map(|dt: chrono::DateTime<Utc>| dt.format(FORMAT_DATE).to_string())
+                .unwrap_or_default();
+
+            println!("\tFound PowerShell profile: {}", path.display());
+            result.push(Persistence {
+                timestamp: ts,
+                path: path.to_string_lossy().to_string(),
+                access_gained: "User".to_string(),
+                technique: "PowerShell Profile Script".to_string(),
+                value: path.to_string_lossy().to_string(),
+            });
+        }
+    }
+    result
+}
+
 // ─── Helper: current control set ─────────────────────────────────────────────
 
 fn get_current_control_set(root: &nt_hive2::KeyNode, hive: &mut HiveFile) -> Option<u32> {
@@ -1548,116 +1744,329 @@ fn write_csv(persistences: &[Persistence], prefix: &Path) -> Result<()> {
 
 fn run_all(hives: &[PathBuf], source: &Path) -> Vec<Persistence> {
     let mut all: Vec<Persistence> = Vec::new();
-    all.extend(get_run(hives));
-    all.extend(get_runonce(hives));
-    all.extend(get_runex(hives));
-    all.extend(get_runonceex(hives));
-    all.extend(get_image_file_execution_options(hives));
-    all.extend(get_nldp_dll_override_path(hives));
-    all.extend(get_aedebug(hives));
-    all.extend(get_wer_fault_hangs(hives));
-    all.extend(get_cmd_autorun(hives));
-    all.extend(get_explorer_load(hives));
-    all.extend(get_winlogon_userinit(hives));
-    all.extend(get_winlogon_shell(hives));
+    if !hives.is_empty() {
+        all.extend(get_run(hives));
+        all.extend(get_runonce(hives));
+        all.extend(get_runex(hives));
+        all.extend(get_runonceex(hives));
+        all.extend(get_image_file_execution_options(hives));
+        all.extend(get_nldp_dll_override_path(hives));
+        all.extend(get_aedebug(hives));
+        all.extend(get_wer_fault_hangs(hives));
+        all.extend(get_cmd_autorun(hives));
+        all.extend(get_explorer_load(hives));
+        all.extend(get_winlogon_userinit(hives));
+        all.extend(get_winlogon_shell(hives));
+        all.extend(get_app_cert_dlls(hives));
+        all.extend(get_app_paths(hives));
+        all.extend(get_service_dlls(hives));
+        all.extend(get_gp_extension_dlls(hives));
+        all.extend(get_winlogon_mpnotify(hives));
+        all.extend(get_chm_helper_dll(hives));
+        all.extend(get_windows_services(hives));
+        all.extend(get_user_init_mpr_script(hives));
+        all.extend(get_hhctrl_hijacking(hives));
+        all.extend(get_app_init_dlls(hives));
+        all.extend(get_lsa_packages(hives));
+        all.extend(get_boot_execute(hives));
+        all.extend(get_active_setup(hives));
+        all.extend(get_screensaver(hives));
+        all.extend(get_silent_process_exit(hives));
+        all.extend(get_com_hijacking(hives));
+        all.extend(get_print_monitors(hives));
+        all.extend(get_time_providers(hives));
+        all.extend(get_netsh_helper_dlls(hives));
+    }
     let settings_files = get_settings_json_files(source);
     all.extend(get_terminal_profile_start_on_user_login(&settings_files));
-    all.extend(get_app_cert_dlls(hives));
-    all.extend(get_app_paths(hives));
-    all.extend(get_service_dlls(hives));
-    all.extend(get_gp_extension_dlls(hives));
-    all.extend(get_winlogon_mpnotify(hives));
-    all.extend(get_chm_helper_dll(hives));
     let startup_files = get_startup_files(source);
     all.extend(get_startup_programs(&startup_files));
     all.extend(get_scheduled_tasks(hives, Some(source)));
-    all.extend(get_windows_services(hives));
-    all.extend(get_user_init_mpr_script(hives));
-    all.extend(get_hhctrl_hijacking(hives));
-    all.extend(get_app_init_dlls(hives));
-    all.extend(get_lsa_packages(hives));
-    all.extend(get_boot_execute(hives));
-    all.extend(get_active_setup(hives));
-    all.extend(get_screensaver(hives));
-    all.extend(get_silent_process_exit(hives));
-    all.extend(get_com_hijacking(hives));
+    all.extend(get_powershell_profiles(source));
     all
+}
+
+fn persistence_to_event(p: &Persistence, computer_name: &str) -> event::Event {
+    let processname = if p.value.contains('\\') || p.value.contains('/') {
+        p.value
+            .rsplit(['\\', '/'])
+            .next()
+            .unwrap_or(&p.value)
+            .split_whitespace()
+            .next()
+            .unwrap_or(&p.value)
+            .to_string()
+    } else {
+        p.value.split_whitespace().next().unwrap_or(&p.value).to_string()
+    };
+
+    let clean_tech = p
+        .technique
+        .to_lowercase()
+        .replace([' ', '(', ')', '/', '.'], "_");
+    let artifact = format!("windows:persistence:{}", clean_tech);
+
+    event::Event {
+        timestamp: p.timestamp.clone(),
+        computer: computer_name.to_string(),
+        artifact,
+        event_id: 0,
+        pid: 0,
+        subject_username: p.access_gained.clone(),
+        target_username: p.access_gained.clone(),
+        processname,
+        commandline: Some(p.value.clone()),
+        parentprocessname: p.path.clone(),
+    }
+}
+
+fn execute_action(action: &Action, hives: &[PathBuf], source: Option<&Path>) -> Vec<Persistence> {
+    match action {
+        Action::GetRun => get_run(hives),
+        Action::GetRunOnce => get_runonce(hives),
+        Action::GetRunEx => get_runex(hives),
+        Action::GetRunOnceEx => get_runonceex(hives),
+        Action::GetImageFileExecutionOptions => get_image_file_execution_options(hives),
+        Action::GetNldpDllOverridePath => get_nldp_dll_override_path(hives),
+        Action::GetAedebug => get_aedebug(hives),
+        Action::GetWerFaultHangs => get_wer_fault_hangs(hives),
+        Action::GetCmdAutorun => get_cmd_autorun(hives),
+        Action::GetExplorerLoad => get_explorer_load(hives),
+        Action::GetWinlogonUserinit => get_winlogon_userinit(hives),
+        Action::GetWinlogonShell => get_winlogon_shell(hives),
+        Action::GetTerminalProfileStartOnUserLogin => {
+            let files = source.map(get_settings_json_files).unwrap_or_default();
+            get_terminal_profile_start_on_user_login(&files)
+        }
+        Action::GetAppCertDlls => get_app_cert_dlls(hives),
+        Action::GetAppPaths => get_app_paths(hives),
+        Action::GetServiceDlls => get_service_dlls(hives),
+        Action::GetGpExtensionDlls => get_gp_extension_dlls(hives),
+        Action::GetWinlogonMpNotify => get_winlogon_mpnotify(hives),
+        Action::GetChmHelperDll => get_chm_helper_dll(hives),
+        Action::GetStartupPrograms => {
+            let files = source.map(get_startup_files).unwrap_or_default();
+            get_startup_programs(&files)
+        }
+        Action::GetScheduledTasks => get_scheduled_tasks(hives, source),
+        Action::GetWindowsServices => get_windows_services(hives),
+        Action::GetUserInitMprScript => get_user_init_mpr_script(hives),
+        Action::GetHhCtrlHijacking => get_hhctrl_hijacking(hives),
+        Action::GetAppInitDlls => get_app_init_dlls(hives),
+        Action::GetLsaPackages => get_lsa_packages(hives),
+        Action::GetBootExecute => get_boot_execute(hives),
+        Action::GetActiveSetup => get_active_setup(hives),
+        Action::GetScreensaver => get_screensaver(hives),
+        Action::GetSilentProcessExit => get_silent_process_exit(hives),
+        Action::GetComHijacking => get_com_hijacking(hives),
+        Action::GetPrintMonitors => get_print_monitors(hives),
+        Action::GetTimeProviders => get_time_providers(hives),
+        Action::GetNetshHelperDlls => get_netsh_helper_dlls(hives),
+        Action::GetPowerShellProfiles => {
+            if let Some(src) = source {
+                get_powershell_profiles(src)
+            } else {
+                Vec::new()
+            }
+        }
+        Action::GetLinuxPersistence | Action::All => Vec::new(),
+    }
+}
+
+fn process_target_directory(
+    path: &Path,
+    action: &Action,
+    silent: bool,
+    all_events: &mut Vec<event::Event>,
+) {
+    let raw_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let hostname = if raw_name.starts_with("uac-") || raw_name.starts_with("uac_results_") {
+        let stripped = raw_name
+            .trim_start_matches("uac-")
+            .trim_start_matches("uac_results_");
+        if let Some(pos) = stripped.find("-linux") {
+            stripped[..pos].to_string()
+        } else if let Some(pos) = stripped.find(".tar") {
+            stripped[..pos].to_string()
+        } else {
+            stripped.to_string()
+        }
+    } else {
+        raw_name
+    };
+
+    // 1. Check if Linux system / triage
+    if parsers::linux::is_linux_target(path) {
+        if *action == Action::All || *action == Action::GetLinuxPersistence {
+            if !silent {
+                println!("🐧 Detected Linux target [{}]: {}", hostname, path.display());
+            }
+            let linux_events = parsers::linux::process_linux_target(path, &hostname);
+            all_events.extend(linux_events);
+        }
+        return;
+    }
+
+    // 2. Process Windows artifacts ONLY if not Linux
+    if *action != Action::GetLinuxPersistence {
+        let hives = get_hives(path);
+        if hives.is_empty() && !path.join("Windows").exists() && !path.join("windows").exists() {
+            return;
+        }
+
+        if !silent {
+            println!("🪟 Detected Windows target [{}]: {}", hostname, path.display());
+        }
+
+        let persistences = if *action == Action::All {
+            run_all(&hives, path)
+        } else {
+            execute_action(action, &hives, Some(path))
+        };
+
+        for p in &persistences {
+            all_events.push(persistence_to_event(p, &hostname));
+        }
+    }
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    let source = args.source_evidence.as_deref();
+    // Collect evidence directories and files (supports both standard and legacy CLI flags)
+    let mut raw_dirs = args.directory.clone();
+    if let Some(ref se) = args.source_evidence {
+        raw_dirs.push(se.to_string_lossy().to_string());
+    }
+    let raw_files = args.file.clone();
 
-    // For actions that need hives or source evidence, check source is provided
-    match &args.action {
-        Action::All => {
-            let source = source.expect("--source-evidence required for 'all'");
-            let hives = get_hives(source);
-            let mut persistences = run_all(&hives, source);
-            persistences.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
-            if let Some(prefix) = &args.csv_output {
-                write_csv(&persistences, prefix)?;
-            }
+    if raw_dirs.is_empty() && raw_files.is_empty() {
+        eprintln!("Faramir - Error: At least one directory or file must be provided.");
+        eprintln!("Usage examples:");
+        eprintln!("  faramir -d /path/to/evidence -o timeline.csv");
+        eprintln!("  faramir -f evidence.E01 -o timeline.csv");
+        eprintln!("  faramir --source-evidence C:\\mount --csv-output C:\\out all");
+        std::process::exit(1);
+    }
+
+    // Determine output file path
+    let out_file: PathBuf = if let Some(ref o) = args.output {
+        if o.is_dir() {
+            o.join("faramir.output.csv")
+        } else {
+            o.clone()
         }
-        action => {
-            let hives: Vec<PathBuf> = if let Some(src) = source {
-                get_hives(src)
+    } else if let Some(ref pfx) = args.csv_output {
+        if pfx.is_dir() {
+            pfx.join("faramir.output.csv")
+        } else {
+            pfx.clone()
+        }
+    } else {
+        PathBuf::from("faramir.output.csv")
+    };
+
+    if !args.silent {
+        println!("⚔️  Faramir v0.2.0 - DFIR Persistence Hunting Tool");
+        println!("==================================================");
+    }
+
+    let (direct_dirs, direct_files, archives, images) =
+        ingest::discover_evidence_targets(
+            if raw_dirs.is_empty() { None } else { Some(&raw_dirs) },
+            if raw_files.is_empty() { None } else { Some(&raw_files) },
+        );
+
+    let mut all_events: Vec<event::Event> = Vec::new();
+
+    // 1. Process forensic disk images streaming
+    if !images.is_empty() {
+        if !args.silent {
+            println!("💿 Discovered {} forensic disk image(s). Parsing NTFS & VSS...", images.len());
+        }
+        for (idx, img) in images.iter().enumerate() {
+            let unique_id = format!("faramir_img_{}_{}", std::process::id(), idx);
+            let staging = std::env::temp_dir().join(unique_id);
+            let _ = std::fs::create_dir_all(&staging);
+
+            let img_name = img.file_name().unwrap_or_default().to_string_lossy();
+            if !args.silent {
+                println!("  [{}/{}] Extracting image: {}", idx + 1, images.len(), img_name);
+            }
+
+            if let Ok(extracted) = ingest::image::unpack_disk_image(img, &staging, args.silent) {
+                process_target_directory(&extracted, &args.action, args.silent, &mut all_events);
+            }
+            let _ = std::fs::remove_dir_all(&staging);
+        }
+    }
+
+    // 2. Process forensic archives streaming
+    if !archives.is_empty() {
+        if !args.silent {
+            println!("📦 Discovered {} forensic archive(s) / triage packages...", archives.len());
+        }
+        for (idx, archive) in archives.iter().enumerate() {
+            let unique_id = format!("faramir_arc_{}_{}", std::process::id(), idx);
+            let staging = std::env::temp_dir().join(unique_id);
+            let _ = std::fs::create_dir_all(&staging);
+
+            let arc_name = archive.file_name().unwrap_or_default().to_string_lossy();
+            if !args.silent {
+                println!("  [{}/{}] Unpacking triage: {}", idx + 1, archives.len(), arc_name);
+            }
+
+            if let Ok(extracted_dirs) = ingest::archive::unpack_archive_recursive(archive, &staging, args.silent) {
+                for dir in extracted_dirs {
+                    process_target_directory(&dir, &args.action, args.silent, &mut all_events);
+                }
+            }
+            let _ = std::fs::remove_dir_all(&staging);
+        }
+    }
+
+    // 3. Process direct directories
+    for dir in direct_dirs {
+        process_target_directory(&dir, &args.action, args.silent, &mut all_events);
+    }
+
+    // 4. Process direct individual files
+    for file in direct_files {
+        let path = file.as_path();
+        let hostname = "SingleFile";
+
+        let fname = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+        if fname.ends_with(".service") || fname.contains("cron") || fname.contains("profile") {
+            let linux_events = parsers::linux::process_linux_target(path, hostname);
+            all_events.extend(linux_events);
+        } else {
+            // Treat as standalone hive
+            let hives = vec![path.to_path_buf()];
+            let persistences = if args.action == Action::All {
+                run_all(&hives, path.parent().unwrap_or(path))
             } else {
-                Vec::new()
+                execute_action(&args.action, &hives, path.parent())
             };
 
-            let mut persistences = match action {
-                Action::GetRun => get_run(&hives),
-                Action::GetRunOnce => get_runonce(&hives),
-                Action::GetRunEx => get_runex(&hives),
-                Action::GetRunOnceEx => get_runonceex(&hives),
-                Action::GetImageFileExecutionOptions => get_image_file_execution_options(&hives),
-                Action::GetNldpDllOverridePath => get_nldp_dll_override_path(&hives),
-                Action::GetAedebug => get_aedebug(&hives),
-                Action::GetWerFaultHangs => get_wer_fault_hangs(&hives),
-                Action::GetCmdAutorun => get_cmd_autorun(&hives),
-                Action::GetExplorerLoad => get_explorer_load(&hives),
-                Action::GetWinlogonUserinit => get_winlogon_userinit(&hives),
-                Action::GetWinlogonShell => get_winlogon_shell(&hives),
-                Action::GetTerminalProfileStartOnUserLogin => {
-                    let files = source
-                        .map(get_settings_json_files)
-                        .unwrap_or_default();
-                    get_terminal_profile_start_on_user_login(&files)
-                }
-                Action::GetAppCertDlls => get_app_cert_dlls(&hives),
-                Action::GetAppPaths => get_app_paths(&hives),
-                Action::GetServiceDlls => get_service_dlls(&hives),
-                Action::GetGpExtensionDlls => get_gp_extension_dlls(&hives),
-                Action::GetWinlogonMpNotify => get_winlogon_mpnotify(&hives),
-                Action::GetChmHelperDll => get_chm_helper_dll(&hives),
-                Action::GetStartupPrograms => {
-                    let files = source
-                        .map(get_startup_files)
-                        .unwrap_or_default();
-                    get_startup_programs(&files)
-                }
-                Action::GetScheduledTasks => get_scheduled_tasks(&hives, source),
-                Action::GetWindowsServices => get_windows_services(&hives),
-                Action::GetUserInitMprScript => get_user_init_mpr_script(&hives),
-                Action::GetHhCtrlHijacking => get_hhctrl_hijacking(&hives),
-                Action::GetAppInitDlls => get_app_init_dlls(&hives),
-                Action::GetLsaPackages => get_lsa_packages(&hives),
-                Action::GetBootExecute => get_boot_execute(&hives),
-                Action::GetActiveSetup => get_active_setup(&hives),
-                Action::GetScreensaver => get_screensaver(&hives),
-                Action::GetSilentProcessExit => get_silent_process_exit(&hives),
-                Action::GetComHijacking => get_com_hijacking(&hives),
-                Action::All => unreachable!(),
-            };
-
-            persistences.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
-            if let Some(prefix) = &args.csv_output {
-                write_csv(&persistences, prefix)?;
+            for p in &persistences {
+                all_events.push(persistence_to_event(p, hostname));
             }
         }
     }
+
+    // Sort chronologically
+    all_events.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+
+    if !args.silent {
+        println!("📊 Total persistence events collected: {}", all_events.len());
+    }
+
+    // Export timeline in unified Masstin/Caarea CSV format
+    csv_out::export_timeline(&all_events, &out_file, args.silent)?;
 
     Ok(())
 }
