@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+pub mod errors;
 pub mod event;
 pub mod csv_out;
 pub mod utils;

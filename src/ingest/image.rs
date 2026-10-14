@@ -39,7 +39,14 @@ pub fn is_supported_image(path: &Path) -> bool {
         return true;
     }
 
-    if filename.ends_with(".dd") || filename.ends_with(".raw") || filename.ends_with(".img") || filename.ends_with(".001") {
+    if filename.ends_with(".dd")
+        || filename.ends_with(".raw")
+        || filename.ends_with(".img")
+        || filename.ends_with(".001")
+        || filename.ends_with(".vmdk")
+        || filename.ends_with(".vhd")
+        || filename.ends_with(".vhdx")
+    {
         return true;
     }
 

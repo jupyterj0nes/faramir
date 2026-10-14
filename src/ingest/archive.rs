@@ -38,6 +38,8 @@ pub fn is_supported_archive(path: &Path) -> bool {
         || filename.ends_with(".tar.gz")
         || filename.ends_with(".tgz")
         || filename.ends_with(".tar")
+        || filename.ends_with(".7z")
+        || filename.ends_with(".rar")
 }
 
 /// Checks if an archive entry is a relevant forensic artifact for execution timelining
@@ -182,6 +184,9 @@ pub fn read_zip_top_entries(zip_path: &Path) -> Option<Vec<String>> {
 
 /// Inspects an archive to detect triage package type and hostname
 pub fn inspect_triage_archive(path: &Path) -> Option<TriageInfo> {
+    if !path.exists() {
+        return None;
+    }
     let path_str = path.to_string_lossy().to_string();
     let entries = read_zip_top_entries(path).unwrap_or_default();
     let kind = detect_triage_type(&path_str, &entries).unwrap_or(TriageType::Generic);
