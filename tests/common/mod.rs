@@ -79,6 +79,11 @@ pub struct KeyDef {
     pub values: Vec<(String, ValueDef)>,
     pub subkeys: Vec<KeyDef>,
     pub timestamp: u64,
+    /// Written as a free cell and left out of the parent's subkey list,
+    /// exactly what Windows leaves behind after `RegDeleteKey`.
+    pub deleted: bool,
+    /// Written as free vk cells (with their data) and left out of the value list.
+    pub deleted_values: Vec<(String, ValueDef)>,
 }
 
 impl KeyDef {
@@ -88,6 +93,8 @@ impl KeyDef {
             values: Vec::new(),
             subkeys: Vec::new(),
             timestamp: FILETIME_2024,
+            deleted: false,
+            deleted_values: Vec::new(),
         }
     }
 
@@ -176,6 +183,34 @@ impl HiveBuilder {
         self.set(path, name, ValueDef::Binary(b.to_vec()))
     }
 
+    /// Mark a key (and everything under it) as deleted: its cells stay on disk as free cells.
+    pub fn delete_key(&mut self, path: &str) -> &mut Self {
+        fn mark(k: &mut KeyDef) {
+            k.deleted = true;
+            for c in &mut k.subkeys {
+                mark(c);
+            }
+        }
+        mark(self.key(path));
+        self
+    }
+
+    /// Delete a value: its vk cell (and data) stay on disk as free cells.
+    pub fn delete_value(&mut self, path: &str, name: &str) -> &mut Self {
+        let k = self.key(path);
+        if let Some(pos) = k.values.iter().position(|(n, _)| n.eq_ignore_ascii_case(name)) {
+            let v = k.values.remove(pos);
+            k.deleted_values.push(v);
+        }
+        self
+    }
+
+    /// A value that only exists as a free cell (never listed).
+    pub fn deleted_sz(&mut self, path: &str, name: &str, s: &str) -> &mut Self {
+        self.key(path).deleted_values.push((name.to_string(), ValueDef::Sz(s.to_string())));
+        self
+    }
+
     /// Serialised hive bins (what follows the base block).
     pub fn hbin_region(&self) -> Vec<u8> {
         let (bins, _root_off) = self.serialise_bins();
@@ -242,9 +277,15 @@ impl Bins {
     }
 
     fn alloc(&mut self, payload: &[u8]) -> u32 {
+        self.alloc_with(payload, false)
+    }
+
+    /// `free == true` writes the cell with a positive size: a deleted cell.
+    fn alloc_with(&mut self, payload: &[u8], free: bool) -> u32 {
         let off = self.data.len() as u32;
         let total = (4 + payload.len()).div_ceil(8) * 8;
-        self.data.extend_from_slice(&(-(total as i32)).to_le_bytes());
+        let size = if free { total as i32 } else { -(total as i32) };
+        self.data.extend_from_slice(&size.to_le_bytes());
         self.data.extend_from_slice(payload);
         self.data.resize(off as usize + total, 0);
         off
@@ -292,10 +333,14 @@ fn multi_sz_bytes(list: &[String]) -> Vec<u8> {
 }
 
 fn write_value(bins: &mut Bins, name: &str, v: &ValueDef) -> u32 {
+    write_value_with(bins, name, v, false)
+}
+
+fn write_value_with(bins: &mut Bins, name: &str, v: &ValueDef, free: bool) -> u32 {
     let (data_size, data_field, data_type): (u32, u32, u32) = match v {
         ValueDef::Sz(s) | ValueDef::ExpandSz(s) => {
             let bytes = utf16le(s);
-            let off = bins.alloc(&bytes);
+            let off = bins.alloc_with(&bytes, free);
             (bytes.len() as u32, off, if matches!(v, ValueDef::Sz(_)) { 1 } else { 2 })
         }
         ValueDef::SzResident(s) => {
@@ -326,7 +371,7 @@ fn write_value(bins: &mut Bins, name: &str, v: &ValueDef) -> u32 {
     vk.extend_from_slice(&1u16.to_le_bytes()); // VALUE_COMP_NAME (ASCII name)
     vk.extend_from_slice(&0u16.to_le_bytes());
     vk.extend_from_slice(name_bytes);
-    bins.alloc(&vk)
+    bins.alloc_with(&vk, free)
 }
 
 fn nk_cell_len(key: &KeyDef) -> usize {
@@ -343,15 +388,17 @@ fn write_key(bins: &mut Bins, key: &KeyDef, is_root: bool) -> u32 {
     } else {
         None
     };
+    // every child is written (deleted ones as free cells); only live ones are listed
     let child_offs: Vec<u32> = key.subkeys.iter().map(|k| write_key(bins, k, false)).collect();
+    let live_children: Vec<(&KeyDef, u32)> = key.subkeys.iter().zip(child_offs.iter().copied()).filter(|(k, _)| !k.deleted).collect();
 
-    let sk_list_off = if child_offs.is_empty() {
+    let sk_list_off = if live_children.is_empty() {
         0xffff_ffff
     } else {
         let mut p = Vec::new();
         p.extend_from_slice(b"lf");
-        p.extend_from_slice(&(child_offs.len() as u16).to_le_bytes());
-        for (child, off) in key.subkeys.iter().zip(&child_offs) {
+        p.extend_from_slice(&(live_children.len() as u16).to_le_bytes());
+        for (child, off) in &live_children {
             p.extend_from_slice(&off.to_le_bytes());
             let mut hint = [0u8; 4];
             for (i, b) in child.name.bytes().take(4).enumerate() {
@@ -362,7 +409,11 @@ fn write_key(bins: &mut Bins, key: &KeyDef, is_root: bool) -> u32 {
         bins.alloc(&p)
     };
 
-    let val_offs: Vec<u32> = key.values.iter().map(|(n, v)| write_value(bins, n, v)).collect();
+    let free = key.deleted;
+    for (n, v) in &key.deleted_values {
+        write_value_with(bins, n, v, true);
+    }
+    let val_offs: Vec<u32> = key.values.iter().map(|(n, v)| write_value_with(bins, n, v, free)).collect();
     let vl_off = if val_offs.is_empty() {
         0xffff_ffff
     } else {
@@ -370,7 +421,7 @@ fn write_key(bins: &mut Bins, key: &KeyDef, is_root: bool) -> u32 {
         for o in &val_offs {
             p.extend_from_slice(&o.to_le_bytes());
         }
-        bins.alloc(&p)
+        bins.alloc_with(&p, free)
     };
 
     let name_bytes = key.name.as_bytes();
@@ -380,7 +431,7 @@ fn write_key(bins: &mut Bins, key: &KeyDef, is_root: bool) -> u32 {
     nk.extend_from_slice(&key.timestamp.to_le_bytes());
     nk.extend_from_slice(&0u32.to_le_bytes()); // access bits
     nk.extend_from_slice(&0u32.to_le_bytes()); // parent (patched below for children)
-    nk.extend_from_slice(&(child_offs.len() as u32).to_le_bytes());
+    nk.extend_from_slice(&(live_children.len() as u32).to_le_bytes());
     nk.extend_from_slice(&0u32.to_le_bytes()); // volatile subkey count
     nk.extend_from_slice(&sk_list_off.to_le_bytes());
     nk.extend_from_slice(&0xffff_ffffu32.to_le_bytes()); // volatile subkeys list
@@ -404,7 +455,7 @@ fn write_key(bins: &mut Bins, key: &KeyDef, is_root: bool) -> u32 {
             bins.data[start..start + nk.len()].copy_from_slice(&nk);
             off
         }
-        None => bins.alloc(&nk),
+        None => bins.alloc_with(&nk, key.deleted),
     };
 
     for child in child_offs {

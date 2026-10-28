@@ -1,12 +1,15 @@
 //! Windows persistence engine: hive handling and every registry/filesystem technique.
 
+pub mod deleted;
 pub mod diag;
 pub mod hives;
 pub mod techniques;
 pub mod txlog;
+pub mod vss;
 
 pub use hives::{classify_hive, discover_hives, open_hive, HiveInfo, HiveKind, RecoveryReport};
 pub use techniques::{run_all, run_technique, HiveSet, KeyRoot, Persistence, Root, TechniqueId};
+pub use vss::fold_vss_findings;
 
 use crate::event::Event;
 
@@ -55,7 +58,13 @@ pub fn persistence_to_event(p: &Persistence, computer_name: &str) -> Event {
         .technique
         .to_lowercase()
         .replace([' ', '(', ')', '/', '.'], "_");
-    let artifact = format!("windows:persistence:{}", clean_tech);
+    let artifact = if p.source.starts_with("vss:") {
+        format!("windows:persistence:removed_since_vss:{}", clean_tech)
+    } else if p.source == deleted::SOURCE_DELETED {
+        format!("windows:persistence:deleted:{}", clean_tech)
+    } else {
+        format!("windows:persistence:{}", clean_tech)
+    };
 
     Event {
         timestamp: p.timestamp.clone(),

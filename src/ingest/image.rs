@@ -235,11 +235,22 @@ fn find_ntfs_partitions<R: Read + Seek>(reader: &mut R, image_size: u64) -> Resu
 }
 
 /// Extracts execution artifacts (EVTX, Registry, Amcache, Users) from an NTFS partition
+/// Name of the staging folder for a partition or one of its shadow copies.
+pub fn partition_dir_name(part_idx: usize, vss_store: Option<usize>) -> String {
+    match vss_store {
+        Some(s) => format!("partition_{part_idx}_vss_{s}"),
+        None => format!("partition_{part_idx}"),
+    }
+}
+
+/// Sidecar written next to the artifacts of a shadow copy.
+pub const VSS_INFO_FILE: &str = "VSS_INFO.txt";
+
 fn extract_artifacts_from_ntfs<R: Read + Seek>(
     reader: &mut R,
     partition_offset: u64,
     output_dir: &Path,
-    part_idx: usize,
+    dir_name: &str,
 ) -> Result<usize, String> {
     let mut part_reader = OffsetReader::new(reader, partition_offset);
 
@@ -248,7 +259,7 @@ fn extract_artifacts_from_ntfs<R: Read + Seek>(
 
     let root_dir = ntfs.root_directory(&mut part_reader).map_err(|e| format!("Cannot read root directory: {}", e))?;
 
-    let part_dir = output_dir.join(format!("partition_{}", part_idx));
+    let part_dir = output_dir.join(dir_name);
     fs::create_dir_all(&part_dir).map_err(|e| e.to_string())?;
 
     let mut total_extracted = 0;
@@ -502,6 +513,68 @@ fn dump_ntfs_file_data<R: Read + Seek>(file: &ntfs::NtfsFile, reader: &mut R, ou
     Ok(())
 }
 
+/// Walks every Volume Shadow Copy of an NTFS partition and extracts the same
+/// artifacts as from the live volume into `partition_<idx>_vss_<store>/`,
+/// with a `VSS_INFO.txt` sidecar carrying the snapshot's creation time.
+/// Returns the number of files extracted across all stores.
+fn extract_vss_stores<R: Read + Seek>(reader: &mut R, part_offset: u64, out_dir: &Path, idx: usize, silent: bool) -> usize {
+    let mut part_reader = OffsetReader::new(reader, part_offset);
+    let vss = match VssVolume::new(&mut part_reader) {
+        Ok(v) => v,
+        Err(_) => return 0, // no VSS structures on this volume
+    };
+    let count = vss.store_count();
+    if count == 0 {
+        return 0;
+    }
+    log_message(
+        silent,
+        &format!("  ├─ Detected {} Volume Shadow Copy (VSS) store(s) on Partition {}", count, idx + 1),
+    );
+    let mut total = 0usize;
+    for s in 0..count {
+        let info = vss.store_info(s).ok();
+        let created = info.as_ref().map(|i| i.creation_time_utc()).unwrap_or_else(|| "unknown".to_string());
+        let sequence = info.as_ref().map(|i| i.sequence).unwrap_or(0);
+        let dir_name = partition_dir_name(idx, Some(s));
+        log_message(silent, &format!("  ├─ VSS store {} (created {}): extracting artifacts...", s, created));
+
+        let mut store_reader = match vss.store_reader(&mut part_reader, s) {
+            Ok(r) => r,
+            Err(e) => {
+                crate::windows::diag::record(crate::errors::FaramirError::VssParseError(format!(
+                    "partition {} store {}: {}",
+                    idx + 1,
+                    s,
+                    e
+                )));
+                continue;
+            }
+        };
+        match extract_artifacts_from_ntfs(&mut store_reader, 0, out_dir, &dir_name) {
+            Ok(n) => {
+                total += n;
+                let sidecar = out_dir.join(&dir_name).join(VSS_INFO_FILE);
+                let _ = fs::write(
+                    &sidecar,
+                    format!("store={s}\npartition={idx}\ncreated={created}\nsequence={sequence}\n"),
+                );
+                log_message(silent, &format!("  │    {} artifacts extracted from VSS store {}", n, s));
+            }
+            Err(e) => {
+                crate::windows::diag::record(crate::errors::FaramirError::VssParseError(format!(
+                    "partition {} store {} (created {}): {}",
+                    idx + 1,
+                    s,
+                    created,
+                    e
+                )));
+            }
+        }
+    }
+    total
+}
+
 /// Unpacks forensic execution artifacts from an E01 or RAW disk image into a destination staging directory
 pub fn unpack_disk_image(
     image_path: &Path,
@@ -603,7 +676,7 @@ fn process_seekable_image<R: Read + Seek>(
             continue;
         }
 
-        match extract_artifacts_from_ntfs(reader, part_offset, out_dir, idx) {
+        match extract_artifacts_from_ntfs(reader, part_offset, out_dir, &partition_dir_name(idx, None)) {
             Ok(count) => {
                 total_extracted += count;
                 log_message(
@@ -619,16 +692,7 @@ fn process_seekable_image<R: Read + Seek>(
             }
         }
 
-        // Check for Volume Shadow Copies (VSS)
-        let mut part_reader = OffsetReader::new(reader, part_offset);
-        if let Ok(vss) = VssVolume::new(&mut part_reader) {
-            if vss.store_count() > 0 {
-                log_message(
-                    silent,
-                    &format!("  ├─ Detected {} Volume Shadow Copy (VSS) store(s) on Partition {}", vss.store_count(), idx + 1),
-                );
-            }
-        }
+        total_extracted += extract_vss_stores(reader, part_offset, out_dir, idx, silent);
     }
 
     log_message(

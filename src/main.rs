@@ -46,6 +46,7 @@ enum Action {
     GetTimeProviders,
     GetNetshHelperDlls,
     GetPowerShellProfiles,
+    GetDeletedPersistence,
     GetLinuxPersistence,
 }
 
@@ -87,6 +88,7 @@ impl Action {
             Action::GetTimeProviders => TechniqueId::TimeProviders,
             Action::GetNetshHelperDlls => TechniqueId::NetshHelperDlls,
             Action::GetPowerShellProfiles => TechniqueId::PowerShellProfiles,
+            Action::GetDeletedPersistence => TechniqueId::DeletedRegistry,
             Action::All | Action::GetLinuxPersistence => return None,
         })
     }
@@ -189,7 +191,11 @@ fn process_target_directory(
         if !silent {
             println!("🪟 Detected Windows target [{}]: {} ({} hive(s))", hostname, path.display(), set.len());
         }
-        let persistences = run_windows(&mut set, action, path);
+        let persistences = windows::fold_vss_findings(run_windows(&mut set, action, path));
+        let removed = persistences.iter().filter(|p| p.source.starts_with("vss:")).count();
+        if removed > 0 && !silent {
+            println!("🕰️  {} persistence item(s) exist only in Volume Shadow Copies (removed from the live volume)", removed);
+        }
         for p in &persistences {
             all_events.push(windows::persistence_to_event(p, &hostname));
         }

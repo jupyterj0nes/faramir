@@ -829,9 +829,9 @@ fn run_all_with_empty_set_runs_only_filesystem_techniques() {
 
 #[test]
 fn technique_catalogue_is_complete_and_unique() {
-    assert_eq!(TechniqueId::ALL.len(), 35);
+    assert_eq!(TechniqueId::ALL.len(), 36);
     let labels: std::collections::HashSet<&str> = TechniqueId::ALL.iter().map(|t| t.label()).collect();
-    assert_eq!(labels.len(), 35);
+    assert_eq!(labels.len(), 36);
 }
 
 #[test]
@@ -896,6 +896,8 @@ fn persistence_to_event_mapping() {
         path: r"C:\ev\SOFTWARE".into(),
         value: r"C:\evil\u.exe --silent".into(),
         access_gained: "System".into(),
+        source: String::new(),
+        origin: String::new(),
     };
     let e = faramir::windows::persistence_to_event(&p, "HOST01");
     assert_eq!(e.computer, "HOST01");

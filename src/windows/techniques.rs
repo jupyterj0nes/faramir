@@ -32,6 +32,11 @@ pub struct Persistence {
     pub path: String,
     pub value: String,
     pub access_gained: String,
+    /// Empty for the live volume; `vss:<store>:<created>` when the finding
+    /// comes from a Volume Shadow Copy and is no longer present live.
+    pub source: String,
+    /// File the finding was read from (hive, task XML, profile…), stamped by the engine.
+    pub origin: String,
 }
 
 /// Logical registry root a key path is relative to.
@@ -220,10 +225,12 @@ pub enum TechniqueId {
     TimeProviders,
     NetshHelperDlls,
     PowerShellProfiles,
+    /// Deleted keys/values recovered from free hive cells (see `windows::deleted`).
+    DeletedRegistry,
 }
 
 impl TechniqueId {
-    pub const ALL: [TechniqueId; 35] = [
+    pub const ALL: [TechniqueId; 36] = [
         TechniqueId::Run,
         TechniqueId::RunOnce,
         TechniqueId::RunEx,
@@ -259,6 +266,7 @@ impl TechniqueId {
         TechniqueId::TimeProviders,
         TechniqueId::NetshHelperDlls,
         TechniqueId::PowerShellProfiles,
+        TechniqueId::DeletedRegistry,
     ];
 
     pub fn label(&self) -> &'static str {
@@ -298,6 +306,7 @@ impl TechniqueId {
             TechniqueId::TimeProviders => "Time Provider DLL",
             TechniqueId::NetshHelperDlls => "Netsh Helper DLL",
             TechniqueId::PowerShellProfiles => "PowerShell Profile Script",
+            TechniqueId::DeletedRegistry => "Deleted Registry Persistence",
         }
     }
 
@@ -339,11 +348,12 @@ impl TechniqueId {
             TechniqueId::TimeProviders => SYSTEM_ONLY,
             TechniqueId::NetshHelperDlls => NETSH_ROOTS,
             TechniqueId::PowerShellProfiles => &[],
+            TechniqueId::DeletedRegistry => &[],
         }
     }
 
     pub fn is_registry_based(&self) -> bool {
-        !self.roots().is_empty()
+        !self.roots().is_empty() || *self == TechniqueId::DeletedRegistry
     }
 
     /// Hive kinds this technique can read something from.
@@ -462,6 +472,27 @@ impl HiveSet {
     pub fn info(&self, idx: usize) -> Option<&HiveInfo> {
         self.entries.get(idx).map(|e| &e.info)
     }
+
+    /// Full bytes of the hive as analysed (transaction logs applied), from the
+    /// already-open instance. Falls back to the on-disk file when the hive was
+    /// opened without its base block.
+    pub fn hive_bytes(&mut self, idx: usize) -> Option<Vec<u8>> {
+        let path = self.info(idx)?.path.clone();
+        self.open(idx)?;
+        let without_base_block = self.recovery(idx)?.opened_without_base_block;
+        if without_base_block {
+            return std::fs::read(&path).ok();
+        }
+        let (_, hive) = self.open(idx)?;
+        let mut buf = std::io::Cursor::new(Vec::new());
+        if hive.write_baseblock(&mut buf).is_err() {
+            return std::fs::read(&path).ok();
+        }
+        use std::io::{Seek, SeekFrom};
+        hive.seek(SeekFrom::Start(0)).ok()?;
+        std::io::copy(hive, &mut buf).ok()?;
+        Some(buf.into_inner())
+    }
 }
 
 // ─── Value helpers ──────────────────────────────────────────────────────────
@@ -574,7 +605,7 @@ where
                 match subpath(&rk, root.path, hive, info)? {
                     Some(key_rc) => {
                         let key = key_rc.borrow();
-                        Ok(f(root, info, &key, hive))
+                        Ok(stamp_origin(f(root, info, &key, hive), &info.path))
                     }
                     None => Ok(Vec::new()),
                 }
@@ -668,7 +699,7 @@ where
             match subpath(&rk, &path, hive, info)? {
                 Some(key_rc) => {
                     let key = key_rc.borrow();
-                    Ok(f(info, &key, hive, cs))
+                    Ok(stamp_origin(f(info, &key, hive, cs), &info.path))
                 }
                 None => Ok(Vec::new()),
             }
@@ -699,7 +730,20 @@ fn persist(ts: String, technique: &str, path: String, value: String, access: &st
         path,
         value,
         access_gained: access.to_string(),
+        source: String::new(),
+        origin: String::new(),
     }
+}
+
+/// Stamp the file every finding was read from (only when not already set).
+fn stamp_origin(mut findings: Vec<Persistence>, origin: &Path) -> Vec<Persistence> {
+    let o = origin.to_string_lossy().to_string();
+    for p in &mut findings {
+        if p.origin.is_empty() {
+            p.origin = o.clone();
+        }
+    }
+    findings
 }
 
 /// Every string value of the key → one finding each (Run keys & co.).
@@ -1011,13 +1055,15 @@ pub fn get_startup_programs(startup_files: &[PathBuf]) -> Vec<Persistence> {
         .iter()
         .map(|program| {
             println!("\t{}", program.display());
-            persist(
+            let mut p = persist(
                 file_mtime_string(program, true),
                 technique,
                 program.to_string_lossy().to_string(),
                 "Startup Folder".to_string(),
                 "User",
-            )
+            );
+            p.origin = program.to_string_lossy().to_string();
+            p
         })
         .collect()
 }
@@ -1078,13 +1124,15 @@ pub fn get_scheduled_tasks(set: &mut HiveSet, source_evidence: Option<&Path>) ->
                 .unwrap_or_default();
             let full_cmd = if args.is_empty() { command.clone() } else { format!("{command} {args}") };
             println!("\t{full_cmd}");
-            result.push(persist(
+            let mut p = persist(
                 file_mtime_string(path, false),
                 "Scheduled Task (XML)",
                 path.to_string_lossy().to_string(),
                 full_cmd,
                 "System",
-            ));
+            );
+            p.origin = path.to_string_lossy().to_string();
+            result.push(p);
         }
     }
     result
@@ -1468,13 +1516,15 @@ pub fn get_powershell_profiles(source: &Path) -> Vec<Persistence> {
         let fname = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
         if fname.ends_with("profile.ps1") {
             println!("\tFound PowerShell profile: {}", path.display());
-            result.push(persist(
+            let mut p = persist(
                 file_mtime_string(path, false),
                 technique,
                 path.to_string_lossy().to_string(),
                 path.to_string_lossy().to_string(),
                 "User",
-            ));
+            );
+            p.origin = path.to_string_lossy().to_string();
+            result.push(p);
         }
     }
     result
@@ -1511,13 +1561,15 @@ pub fn get_terminal_profile_start_on_user_login(settings_files: &[PathBuf]) -> V
                 .unwrap_or("N/A")
                 .to_string();
             println!("\t{commandline}");
-            result.push(persist(
+            let mut p = persist(
                 file_mtime_string(file, false),
                 technique,
                 file.to_string_lossy().to_string(),
                 commandline,
                 "User",
-            ));
+            );
+            p.origin = file.to_string_lossy().to_string();
+            result.push(p);
         }
     }
     result
@@ -1619,6 +1671,7 @@ pub fn run_technique(id: TechniqueId, set: &mut HiveSet, source: Option<&Path>) 
         TechniqueId::TimeProviders => get_time_providers(set),
         TechniqueId::NetshHelperDlls => get_netsh_helper_dlls(set),
         TechniqueId::PowerShellProfiles => source.map(get_powershell_profiles).unwrap_or_default(),
+        TechniqueId::DeletedRegistry => super::deleted::scan_set(set),
     }
 }
 

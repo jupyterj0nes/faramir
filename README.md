@@ -10,7 +10,7 @@ of every autostart, hijack and backdoor on the box, Windows and Linux, ready for
 
 ![Rust](https://img.shields.io/badge/Rust-stable-orange?logo=rust)
 ![Platforms](https://img.shields.io/badge/evidence-Windows%20%7C%20Linux-blue)
-![Tests](https://img.shields.io/badge/tests-876%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-906%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-GPL--3.0-lightgrey)
 
 > *"The younger brother, wiser and swifter."* Faramir is the Rust rewrite of
@@ -158,6 +158,15 @@ Run everything with `all` (the default) or pick one action.
 Every HKCU path is also read from the `DEFAULT` hive (what SYSTEM-context
 logons see), every `SOFTWARE` path from `Wow6432Node` where it exists.
 
+### What the attacker removed
+
+Two more sources run inside `all` and never need an extra flag:
+
+| Source | Action | What it finds |
+|---|---|---|
+| **Deleted cells** | `get-deleted-persistence` | Keys and values whose cells were freed but not yet overwritten, walked with a bounds-checked parser of every hive bin. A deleted key is placed back on its path through the parent chain and matched against the persistence locations above; orphan deleted values are kept when their data looks like a command line. Reported as `windows:persistence:deleted:<technique>`. |
+| **Volume Shadow Copies** | automatic on images | Every snapshot of an NTFS partition is extracted like the live volume (`partition_<n>_vss_<m>/`). A persistence item that exists in a snapshot but not on the live volume is reported once, as `windows:persistence:removed_since_vss:<technique>`, with the snapshot's creation time. |
+
 ---
 
 ## Linux techniques
@@ -181,7 +190,7 @@ package or any folder with the usual `etc/`, `var/`, `home/` layout.
 
 | Input | How it is handled |
 |---|---|
-| `.E01` / `.Ex01` | Opened with the EWF reader, NTFS parsed in place; MBR and GPT partitions, BitLocker volumes reported and skipped, shadow copy stores detected |
+| `.E01` / `.Ex01` | Opened with the EWF reader, NTFS parsed in place; MBR and GPT partitions, BitLocker volumes reported and skipped, every Volume Shadow Copy extracted and diffed against the live volume |
 | `.dd` `.raw` `.img` `.001` | Raw and split-raw images |
 | `.vmdk` | Monolithic or split, sparse or flat, streamOptimized (compressed); snapshots, `-flat` and `-sNNN` extents are read through their descriptor |
 | `.vhd` `.vhdx` | Fixed and dynamic; differencing disks are reported as incomplete |
@@ -246,13 +255,13 @@ The catalogue lives in `src/errors.rs`: `1xxx` system, `2xxx` ingestion,
 | `--verbose` | Also print `INFO` diagnostics |
 | `--silent` | No console output |
 | `--source-evidence`, `--csv-output` | Legacy Boromir flags, still accepted |
-| `[ACTION]` | `all` (default), any `get-*` technique, `get-linux-persistence` |
+| `[ACTION]` | `all` (default), any `get-*` technique, `get-deleted-persistence`, `get-linux-persistence` |
 
 ---
 
 ## How it is tested
 
-876 tests, all green on stable Rust:
+906 tests, all green on stable Rust:
 
 - a **synthetic regf and HvLE writer** builds hives and transaction logs with
   real Marvin32 hashes, so every technique is exercised in the right hive and
