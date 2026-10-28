@@ -125,7 +125,7 @@ fn open_hive(path: &Path) -> Option<HiveFile> {
     let file = File::open(path).ok()?;
     let reader = BufReader::new(file);
     let hive: Hive<BufReader<File>, DirtyHive> =
-        match std::panic::catch_unwind(|| Hive::new(reader, HiveParseMode::NormalWithBaseBlock)) {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Hive::new(reader, HiveParseMode::NormalWithBaseBlock))) {
             Ok(Ok(h)) => h,
             Ok(Err(e)) => {
                 eprintln!("\x1b[31m[ERROR] Could not parse hive '{}': {e}\x1b[0m", path.display());
@@ -147,10 +147,10 @@ fn open_hive(path: &Path) -> Option<HiveFile> {
 
     let log1 = File::open(log_path(path, ".LOG1"))
         .ok()
-        .and_then(|f| TransactionLog::try_from(f).ok());
+        .and_then(|f| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| TransactionLog::try_from(f))).ok()?.ok());
     let log2 = File::open(log_path(path, ".LOG2"))
         .ok()
-        .and_then(|f| TransactionLog::try_from(f).ok());
+        .and_then(|f| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| TransactionLog::try_from(f))).ok()?.ok());
 
     match (log1, log2) {
         (Some(l1), Some(l2)) => {
@@ -205,8 +205,7 @@ fn get_hives(source: &Path) -> Vec<PathBuf> {
             continue;
         }
         let name = entry.file_name().to_string_lossy().to_uppercase();
-        if system_hive_names.contains(&name.as_str())
-            || name.starts_with("NTUSER")
+        if (system_hive_names.contains(&name.as_str()) || name.starts_with("NTUSER")) && !name.contains(".LOG") && !name.contains(".TMP") && !name.contains(".SAV")
         {
             println!("\t{}", path.display());
             hives.push(path.to_path_buf());
@@ -225,7 +224,12 @@ fn run_key_entries(
 ) -> Vec<Persistence> {
     let mut result = Vec::new();
     for hive_path in hives {
+        let hive_name = hive_path.file_name().unwrap_or_default().to_string_lossy().to_uppercase();
+        let is_user = hive_name.starts_with("NTUSER") || hive_name.starts_with("USRCLASS");
+        let is_sys = hive_name == "SYSTEM" || hive_name == "SOFTWARE";
         for (key_path, access) in key_paths {
+            if *access == "User" && !is_user { continue; }
+            if *access == "System" && !is_sys { continue; }
             result.extend(with_key!(hive_path, *key_path, |key, _hive| {
                 let ts = fmt_ts(key.timestamp());
                 key.values()
@@ -1746,37 +1750,54 @@ fn write_csv(persistences: &[Persistence], prefix: &Path) -> Result<()> {
 fn run_all(hives: &[PathBuf], source: &Path) -> Vec<Persistence> {
     let mut all: Vec<Persistence> = Vec::new();
     if !hives.is_empty() {
+        let mut sys_soft_hives = Vec::new();
+        let mut user_hives = Vec::new();
+        let mut sys_only_hives = Vec::new();
+        
+        for h in hives {
+            let name = h.file_name().unwrap_or_default().to_string_lossy().to_uppercase();
+            if name == "SYSTEM" || name == "SOFTWARE" {
+                sys_soft_hives.push(h.clone());
+            }
+            if name == "SYSTEM" {
+                sys_only_hives.push(h.clone());
+            }
+            if name.starts_with("NTUSER") || name.starts_with("USRCLASS") {
+                user_hives.push(h.clone());
+            }
+        }
+    
         all.extend(get_run(hives));
         all.extend(get_runonce(hives));
         all.extend(get_runex(hives));
         all.extend(get_runonceex(hives));
-        all.extend(get_image_file_execution_options(hives));
-        all.extend(get_nldp_dll_override_path(hives));
-        all.extend(get_aedebug(hives));
-        all.extend(get_wer_fault_hangs(hives));
+        all.extend(get_image_file_execution_options(&sys_soft_hives));
+        all.extend(get_nldp_dll_override_path(&sys_soft_hives));
+        all.extend(get_aedebug(&sys_soft_hives));
+        all.extend(get_wer_fault_hangs(&sys_soft_hives));
         all.extend(get_cmd_autorun(hives));
         all.extend(get_explorer_load(hives));
-        all.extend(get_winlogon_userinit(hives));
-        all.extend(get_winlogon_shell(hives));
-        all.extend(get_app_cert_dlls(hives));
-        all.extend(get_app_paths(hives));
-        all.extend(get_service_dlls(hives));
-        all.extend(get_gp_extension_dlls(hives));
-        all.extend(get_winlogon_mpnotify(hives));
-        all.extend(get_chm_helper_dll(hives));
-        all.extend(get_windows_services(hives));
-        all.extend(get_user_init_mpr_script(hives));
-        all.extend(get_hhctrl_hijacking(hives));
-        all.extend(get_app_init_dlls(hives));
-        all.extend(get_lsa_packages(hives));
-        all.extend(get_boot_execute(hives));
-        all.extend(get_active_setup(hives));
-        all.extend(get_screensaver(hives));
-        all.extend(get_silent_process_exit(hives));
-        all.extend(get_com_hijacking(hives));
-        all.extend(get_print_monitors(hives));
-        all.extend(get_time_providers(hives));
-        all.extend(get_netsh_helper_dlls(hives));
+        all.extend(get_winlogon_userinit(&sys_soft_hives));
+        all.extend(get_winlogon_shell(&sys_soft_hives));
+        all.extend(get_app_cert_dlls(&sys_soft_hives));
+        all.extend(get_app_paths(&sys_soft_hives));
+        all.extend(get_service_dlls(&sys_only_hives));
+        all.extend(get_gp_extension_dlls(&sys_soft_hives));
+        all.extend(get_winlogon_mpnotify(&sys_soft_hives));
+        all.extend(get_chm_helper_dll(&sys_soft_hives));
+        all.extend(get_windows_services(&sys_only_hives));
+        all.extend(get_user_init_mpr_script(&user_hives));
+        all.extend(get_hhctrl_hijacking(&user_hives));
+        all.extend(get_app_init_dlls(&sys_soft_hives));
+        all.extend(get_lsa_packages(&sys_only_hives));
+        all.extend(get_boot_execute(&sys_only_hives));
+        all.extend(get_active_setup(&sys_soft_hives));
+        all.extend(get_screensaver(&user_hives));
+        all.extend(get_silent_process_exit(&sys_soft_hives));
+        all.extend(get_com_hijacking(&user_hives));
+        all.extend(get_print_monitors(&sys_only_hives));
+        all.extend(get_time_providers(&sys_only_hives));
+        all.extend(get_netsh_helper_dlls(&sys_soft_hives));
     }
     let settings_files = get_settings_json_files(source);
     all.extend(get_terminal_profile_start_on_user_login(&settings_files));

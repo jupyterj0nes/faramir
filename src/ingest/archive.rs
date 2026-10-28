@@ -66,9 +66,9 @@ pub fn is_relevant_artifact(entry_name: &str) -> bool {
         return true;
     }
 
-    // Registry transaction logs
-    if file_name.ends_with(".log1") || file_name.ends_with(".log2") {
-        return true;
+    // DO NOT unpack .log1/.log2 to prevent nt_hive2 panics from incomplete triages
+    if file_name.ends_with(".log1") || file_name.ends_with(".log2") || file_name.ends_with(".log") || file_name.ends_with(".sav") {
+        return false;
     }
 
     // Targeted Linux execution logs
