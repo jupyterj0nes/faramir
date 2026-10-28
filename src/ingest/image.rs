@@ -27,30 +27,77 @@ fn log_message(silent: bool, message: &str) {
     }
 }
 
-/// Checks if a file path is a supported forensic disk image
-pub fn is_supported_image(path: &Path) -> bool {
+/// An EWF segment extension: `e01`..`e99` / `ex01`..
+fn is_ewf_segment_ext(ext: &str) -> bool {
+    let b = ext.as_bytes();
+    (b.len() == 3 && b[0] == b'e' && b[1].is_ascii_digit() && b[2].is_ascii_alphanumeric())
+        || (b.len() == 4 && b[0] == b'e' && b[1] == b'x' && b[2].is_ascii_alphanumeric() && b[3].is_ascii_alphanumeric())
+}
+
+/// Any file that belongs to a forensic image set, first segment or not.
+pub fn is_image_file(path: &Path) -> bool {
     let filename = match path.file_name() {
         Some(n) => n.to_string_lossy().to_lowercase(),
         None => return false,
     };
+    let Some((_, ext)) = filename.rsplit_once('.') else { return false };
+    matches!(ext, "e01" | "ex01" | "vmdk" | "vhd" | "vhdx" | "dd" | "raw" | "img")
+        || is_ewf_segment_ext(ext)
+        || (ext.len() == 3 && ext.bytes().all(|b| b.is_ascii_digit()))
+}
 
-    // Keep primary .E01 / .Ex01 descriptor and skip split segments (.E02, .E03, etc.)
+/// Is this the FIRST segment of an image set, the one to feed the pipeline?
+/// `.E01` / `.Ex01`, the VMDK descriptor, `.vhd(x)`, `.dd/.raw/.img`, `.001`.
+/// Secondary EWF segments, VMDK `-flat` / `-ctk` / `-sNNN` extents, VMware
+/// snapshots (`-000001.vmdk`) and split-raw continuations (`.002`…) are not.
+pub fn is_primary_image_segment(path: &Path) -> bool {
+    let filename = match path.file_name() {
+        Some(n) => n.to_string_lossy().to_lowercase(),
+        None => return false,
+    };
     if filename.ends_with(".e01") || filename.ends_with(".ex01") {
         return true;
     }
-
-    if filename.ends_with(".dd")
-        || filename.ends_with(".raw")
-        || filename.ends_with(".img")
-        || filename.ends_with(".001")
-        || filename.ends_with(".vmdk")
-        || filename.ends_with(".vhd")
-        || filename.ends_with(".vhdx")
-    {
+    if let Some((_, ext)) = filename.rsplit_once('.') {
+        if is_ewf_segment_ext(ext) {
+            return false;
+        }
+    }
+    if let Some(stem) = filename.strip_suffix(".vmdk") {
+        if stem.ends_with("-flat") || stem.ends_with("-ctk") {
+            return false;
+        }
+        if let Some(pos) = stem.rfind("-s") {
+            let a = &stem[pos + 2..];
+            if !a.is_empty() && a.chars().all(|c| c.is_ascii_digit()) {
+                return false;
+            }
+        }
+        if let Some(pos) = stem.rfind("-0") {
+            let a = &stem[pos + 1..];
+            if a.len() >= 6 && a[..6].chars().all(|c| c.is_ascii_digit()) {
+                return false;
+            }
+        }
         return true;
     }
-
+    if filename.ends_with(".vhd") || filename.ends_with(".vhdx") {
+        return true;
+    }
+    if filename.ends_with(".dd") || filename.ends_with(".raw") || filename.ends_with(".img") || filename.ends_with(".001") {
+        return true;
+    }
     false
+}
+
+/// Checks if a file path is a supported forensic disk image (first segment only).
+pub fn is_supported_image(path: &Path) -> bool {
+    is_primary_image_segment(path)
+}
+
+/// `true` when the file is part of an image set but not its first segment.
+pub fn is_secondary_image_segment(path: &Path) -> bool {
+    is_image_file(path) && !is_primary_image_segment(path)
 }
 
 /// Wrapper that adds a byte offset to all Read/Seek operations, enabling partition-level I/O
@@ -471,7 +518,8 @@ pub fn unpack_disk_image(
     log_message(silent, &format!("💿 Opening forensic disk image: {}", image_path.display()));
 
     if lower.ends_with(".e01") || lower.ends_with(".ex01") {
-        let ewf_reader = ewf::EwfReader::open(&path_str).map_err(|e| format!("Failed to open E01 image: {}", e))?;
+        let ewf_reader = ewf::EwfReader::open(&path_str)
+            .map_err(|e| crate::errors::FaramirError::EwfInitFailed(format!("{}: {e}", image_path.display())).to_string())?;
         let total_size = ewf_reader.total_size();
         log_message(
             silent,
@@ -479,6 +527,37 @@ pub fn unpack_disk_image(
         );
 
         let mut buf_reader = BufReader::new(ewf_reader);
+        process_seekable_image(&mut buf_reader, total_size, &out_dir, silent)?;
+    } else if lower.ends_with(".vmdk") {
+        let reader = super::vmdk::VmdkReader::open(&path_str).map_err(|e| {
+            let msg = format!("{}: {e}", image_path.display());
+            if e.contains("Incomplete VMDK") || e.contains("truncated") {
+                crate::errors::FaramirError::ImageIncomplete(msg).to_string()
+            } else {
+                crate::errors::FaramirError::VmdkOpenFailed(msg).to_string()
+            }
+        })?;
+        let total_size = reader.total_size();
+        log_message(
+            silent,
+            &format!("  ├─ VMDK virtual disk capacity: {:.2} GB", total_size as f64 / 1_073_741_824.0),
+        );
+        let mut buf_reader = BufReader::new(reader);
+        process_seekable_image(&mut buf_reader, total_size, &out_dir, silent)?;
+    } else if lower.ends_with(".vhd") || lower.ends_with(".vhdx") {
+        let (reader, total_size) = super::vhd::open_virtual_disk(&path_str).map_err(|e| {
+            let msg = format!("{}: {e}", image_path.display());
+            if e.contains("differencing") {
+                crate::errors::FaramirError::ImageIncomplete(msg).to_string()
+            } else {
+                crate::errors::FaramirError::VhdOpenFailed(msg).to_string()
+            }
+        })?;
+        log_message(
+            silent,
+            &format!("  ├─ VHD/VHDX virtual disk capacity: {:.2} GB", total_size as f64 / 1_073_741_824.0),
+        );
+        let mut buf_reader = BufReader::new(reader);
         process_seekable_image(&mut buf_reader, total_size, &out_dir, silent)?;
     } else {
         let file = File::open(image_path)?;

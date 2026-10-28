@@ -65,6 +65,14 @@ pub enum FaramirError {
     StagingDirFailed(String),
     /// Volume Shadow Copy (VSS) parsing failed (2014)
     VssParseError(String),
+    /// VMware VMDK descriptor / extent cannot be opened (2015)
+    VmdkOpenFailed(String),
+    /// Microsoft VHD / VHDX cannot be opened (2016)
+    VhdOpenFailed(String),
+    /// Secondary image segment (.E02, -s002.vmdk, .002) skipped; its first segment carries it (2017)
+    ImageSegmentSkipped(String),
+    /// Image is incomplete: descriptor without data file, truncated stream, missing parent (2018)
+    ImageIncomplete(String),
 
     // ─── 3000..3999: Windows Registry & Persistence ─────────────────────────
     /// Failed to open registry hive (3001)
@@ -250,6 +258,10 @@ impl FaramirError {
             Self::ArchiveUnpackError(_) => "ERR_ING_ARCHIVE_UNPACK",
             Self::StagingDirFailed(_) => "ERR_ING_STAGING_CREATE",
             Self::VssParseError(_) => "ERR_ING_VSS_PARSE",
+            Self::VmdkOpenFailed(_) => "ERR_ING_VMDK_OPEN",
+            Self::VhdOpenFailed(_) => "ERR_ING_VHD_OPEN",
+            Self::ImageSegmentSkipped(_) => "ERR_ING_IMAGE_SEGMENT_SKIPPED",
+            Self::ImageIncomplete(_) => "ERR_ING_IMAGE_INCOMPLETE",
 
             Self::HiveOpenFailed(_) => "ERR_WIN_HIVE_OPEN",
             Self::HiveCorrupt(_) => "ERR_WIN_HIVE_CORRUPT",
@@ -355,6 +367,10 @@ impl FaramirError {
             Self::ArchiveUnpackError(_) => 2012,
             Self::StagingDirFailed(_) => 2013,
             Self::VssParseError(_) => 2014,
+            Self::VmdkOpenFailed(_) => 2015,
+            Self::VhdOpenFailed(_) => 2016,
+            Self::ImageSegmentSkipped(_) => 2017,
+            Self::ImageIncomplete(_) => 2018,
 
             Self::HiveOpenFailed(_) => 3001,
             Self::HiveCorrupt(_) => 3002,
@@ -463,6 +479,7 @@ impl FaramirError {
 
             Self::HiveCompanionSkipped(_)
             | Self::HiveDuplicateSkipped(_)
+            | Self::ImageSegmentSkipped(_)
             | Self::TxLogHiveMismatch(_)
             | Self::TechniqueNoApplicableHive(_)
             | Self::TxLogRemoteMatch(_)
@@ -506,6 +523,10 @@ impl FaramirError {
             | Self::ArchiveUnpackError(s)
             | Self::StagingDirFailed(s)
             | Self::VssParseError(s)
+            | Self::VmdkOpenFailed(s)
+            | Self::VhdOpenFailed(s)
+            | Self::ImageSegmentSkipped(s)
+            | Self::ImageIncomplete(s)
             | Self::HiveOpenFailed(s)
             | Self::HiveCorrupt(s)
             | Self::HiveDirtyNoLogs(s)
@@ -608,6 +629,10 @@ impl FaramirError {
             Self::ArchiveUnpackError(e()),
             Self::StagingDirFailed(e()),
             Self::VssParseError(e()),
+            Self::VmdkOpenFailed(e()),
+            Self::VhdOpenFailed(e()),
+            Self::ImageSegmentSkipped(e()),
+            Self::ImageIncomplete(e()),
             Self::HiveOpenFailed(e()),
             Self::HiveCorrupt(e()),
             Self::HiveDirtyNoLogs(e()),
@@ -711,6 +736,10 @@ impl fmt::Display for FaramirError {
             Self::ArchiveUnpackError(e) => write!(f, "Failed to unpack archive entry: {}", e),
             Self::StagingDirFailed(e) => write!(f, "Cannot initialize staging folder: {}", e),
             Self::VssParseError(e) => write!(f, "VSS parsing failure: {}", e),
+            Self::VmdkOpenFailed(e) => write!(f, "Cannot open VMDK: {}", e),
+            Self::VhdOpenFailed(e) => write!(f, "Cannot open VHD/VHDX: {}", e),
+            Self::ImageSegmentSkipped(p) => write!(f, "Secondary image segment skipped (read through its first segment): {}", p),
+            Self::ImageIncomplete(e) => write!(f, "Image is incomplete: {}", e),
 
             Self::HiveOpenFailed(p) => write!(f, "Failed to open hive: {}", p),
             Self::HiveCorrupt(p) => write!(f, "Registry hive is corrupt: {}", p),

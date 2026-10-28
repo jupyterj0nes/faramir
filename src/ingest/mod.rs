@@ -1,6 +1,8 @@
 pub mod archive;
 pub mod image;
 pub mod triage;
+pub mod vhd;
+pub mod vmdk;
 
 use chrono::Local;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -61,6 +63,8 @@ pub fn discover_evidence_targets(
             if path.exists() {
                 if image::is_supported_image(path) {
                     images.push(path.to_path_buf());
+                } else if image::is_secondary_image_segment(path) {
+                    crate::windows::diag::record(crate::errors::FaramirError::ImageSegmentSkipped(path.display().to_string()));
                 } else if archive::is_supported_archive(path) {
                     archives.push(path.to_path_buf());
                 } else {
@@ -83,6 +87,9 @@ pub fn discover_evidence_targets(
                                 images.push(p.to_path_buf());
                                 found_packages = true;
                             }
+                        } else if image::is_secondary_image_segment(p) {
+                            crate::windows::diag::record(crate::errors::FaramirError::ImageSegmentSkipped(p.display().to_string()));
+                            found_packages = true;
                         } else if archive::is_supported_archive(p) && !archives.contains(&p.to_path_buf()) {
                             archives.push(p.to_path_buf());
                             found_packages = true;
