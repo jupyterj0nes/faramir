@@ -517,7 +517,7 @@ pub fn discover_hives(root: &Path) -> Vec<HiveInfo> {
 
     if root.is_file() {
         if let Ok(info) = classify_hive(root, root.parent().unwrap_or(root)) {
-            println!("\t{}", info.label());
+            out!("\t{}", info.label());
             hives.push(info);
         }
         return hives;
@@ -570,7 +570,7 @@ pub fn discover_hives(root: &Path) -> Vec<HiveInfo> {
                 continue;
             }
             let dirty = if info.is_dirty() { " (dirty)" } else { "" };
-            println!("\t{}{}", info.label(), dirty);
+            out!("\t{}{}", info.label(), dirty);
             seen.push(canonical);
             hives.push(info);
         }
@@ -696,7 +696,7 @@ pub fn open_hive(info: &HiveInfo) -> Result<OpenedHive, FaramirError> {
         });
     }
 
-    println!("\t  [!] Dirty hive detected, applying transaction logs...");
+    out!("\t  [!] Dirty hive detected, applying transaction logs...");
 
     if header.primary_sequence != header.secondary_sequence.wrapping_add(1) {
         diag::record(FaramirError::TxLogSequenceMismatch(format!(
@@ -722,7 +722,7 @@ pub fn open_hive(info: &HiveInfo) -> Result<OpenedHive, FaramirError> {
                 selection.rejected.len()
             )));
         }
-        println!("\t    [!] No transaction logs found, proceeding with dirty state");
+        out!("\t    [!] No transaction logs found, proceeding with dirty state");
         return Ok(OpenedHive {
             hive: hive.treat_hive_as_clean(),
             recovery: report,
@@ -734,7 +734,7 @@ pub fn open_hive(info: &HiveInfo) -> Result<OpenedHive, FaramirError> {
             "{label}: every located log entry is older than the hive (secondary sequence {}); nothing to replay",
             header.secondary_sequence
         )));
-        println!("\t    [!] Transaction logs are stale, proceeding with dirty state");
+        out!("\t    [!] Transaction logs are stale, proceeding with dirty state");
         return Ok(OpenedHive {
             hive: hive.treat_hive_as_clean(),
             recovery: report,
@@ -742,7 +742,7 @@ pub fn open_hive(info: &HiveInfo) -> Result<OpenedHive, FaramirError> {
     }
 
     for cand in selection.usable() {
-        println!("\t    -> Applying {}", cand.path.display());
+        out!("\t    -> Applying {}", cand.path.display());
     }
 
     match apply_selection(hive, &selection) {

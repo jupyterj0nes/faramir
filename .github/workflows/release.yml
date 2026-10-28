@@ -1,0 +1,51 @@
+name: release
+
+# Tag a commit as vX.Y.Z and push the tag: both binaries are built on stable
+# Rust and attached to the GitHub release for that tag.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: faramir-${{ github.ref_name }}-windows-x64.zip
+            bin: faramir.exe
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: faramir-${{ github.ref_name }}-linux-x64.tar.gz
+            bin: faramir
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo test --release --locked
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/${{ matrix.bin }} dist/
+          Copy-Item README.md, LICENSE dist/ -ErrorAction SilentlyContinue
+          Compress-Archive -Path dist/* -DestinationPath ${{ matrix.archive }}
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir dist
+          cp target/${{ matrix.target }}/release/${{ matrix.bin }} dist/
+          cp README.md dist/ ; cp LICENSE dist/ 2>/dev/null || true
+          tar -czf ${{ matrix.archive }} -C dist .
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.archive }}
+          generate_release_notes: true

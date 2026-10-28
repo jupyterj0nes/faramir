@@ -764,7 +764,7 @@ fn string_values_of_key(set: &mut HiveSet, roots: &[KeyRoot], technique: &str) -
                     )));
                     return None;
                 }
-                println!("\t{s}");
+                out!("\t{s}");
                 Some(persist(
                     ts.clone(),
                     technique,
@@ -791,7 +791,7 @@ fn single_value_key(
             .filter(|v| value_names.iter().any(|n| v.name().eq_ignore_ascii_case(n)))
             .map(|v| {
                 let path_str = format!("Name: {} Value: {}", v.name(), display_value(v));
-                println!("\t{path_str}");
+                out!("\t{path_str}");
                 persist(
                     fmt_ts(key.timestamp()),
                     technique,
@@ -811,7 +811,7 @@ fn all_values_key(set: &mut HiveSet, roots: &[KeyRoot], technique: &str, persist
             .iter()
             .map(|v| {
                 let path_str = format!("{} {}", v.name(), display_value(v));
-                println!("\t{path_str}");
+                out!("\t{path_str}");
                 persist(
                     fmt_ts(key.timestamp()),
                     technique,
@@ -827,27 +827,27 @@ fn all_values_key(set: &mut HiveSet, roots: &[KeyRoot], technique: &str, persist
 // ─── Techniques ─────────────────────────────────────────────────────────────
 
 pub fn get_run(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Run Persistence");
+    out!("+ Getting Run Persistence");
     string_values_of_key(set, RUN_ROOTS, TechniqueId::Run.label())
 }
 
 pub fn get_runonce(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting RunOnce Persistence");
+    out!("+ Getting RunOnce Persistence");
     string_values_of_key(set, RUNONCE_ROOTS, TechniqueId::RunOnce.label())
 }
 
 pub fn get_runex(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting RunEx Persistence");
+    out!("+ Getting RunEx Persistence");
     string_values_of_key(set, RUNEX_ROOTS, TechniqueId::RunEx.label())
 }
 
 pub fn get_runonceex(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting RunOnceEx Persistence");
+    out!("+ Getting RunOnceEx Persistence");
     string_values_of_key(set, RUNONCEEX_ROOTS, TechniqueId::RunOnceEx.label())
 }
 
 pub fn get_image_file_execution_options(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Image File Execution Options");
+    out!("+ Getting Image File Execution Options");
     let technique = TechniqueId::ImageFileExecutionOptions.label();
     visit_roots(set, IFEO_ROOTS, technique, |_root, _info, key, hive| {
         let mut entries = Vec::new();
@@ -859,7 +859,7 @@ pub fn get_image_file_execution_options(set: &mut HiveSet) -> Vec<Persistence> {
                     if s.trim().is_empty() {
                         continue;
                     }
-                    println!("\t{s}");
+                    out!("\t{s}");
                     entries.push(persist(ts.clone(), technique, s.clone(), s, "System/User"));
                 }
             }
@@ -869,7 +869,7 @@ pub fn get_image_file_execution_options(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_nldp_dll_override_path(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Natural Language Development Platform DLL path override properties.");
+    out!("+ Getting Natural Language Development Platform DLL path override properties.");
     let technique = TechniqueId::NldpDllOverridePath.label();
     visit_control_set(set, r"Control\ContentIndex\Language", technique, |_info, langs, hive, _cs| {
         let mut out = Vec::new();
@@ -881,7 +881,7 @@ pub fn get_nldp_dll_override_path(set: &mut HiveSet) -> Vec<Persistence> {
                 let wb = find_value(&lang, "WBDLLPathOverride").and_then(string_value);
                 if stemmer.is_some() || wb.is_some() {
                     let val = wb.clone().or_else(|| stemmer.clone()).unwrap_or_default();
-                    println!("\t{val}");
+                    out!("\t{val}");
                     out.push(persist(ts, technique, stemmer.unwrap_or_default(), val, "System"));
                 }
             }
@@ -897,7 +897,7 @@ fn debugger_entries(set: &mut HiveSet, roots: &[KeyRoot], technique: &str, persi
         for v in key.values() {
             if v.name().eq_ignore_ascii_case("Debugger") || v.name().eq_ignore_ascii_case("ReflectDebugger") {
                 let path_str = format!("Name: {} Value: {}", v.name(), display_value(v));
-                println!("\t{path_str}");
+                out!("\t{path_str}");
                 entries.push(persist(ts.clone(), technique, path_str, persistence_value.to_string(), root.access));
             }
         }
@@ -907,7 +907,7 @@ fn debugger_entries(set: &mut HiveSet, roots: &[KeyRoot], technique: &str, persi
                 let ts = fmt_ts(sub.timestamp());
                 for v in sub.values() {
                     let path_str = format!("Name: {} Value: {}", v.name(), display_value(v));
-                    println!("\t{path_str}");
+                    out!("\t{path_str}");
                     entries.push(persist(ts.clone(), technique, path_str, persistence_value.to_string(), root.access));
                 }
             }
@@ -917,17 +917,17 @@ fn debugger_entries(set: &mut HiveSet, roots: &[KeyRoot], technique: &str, persi
 }
 
 pub fn get_aedebug(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting AeDebug properties.");
+    out!("+ Getting AeDebug properties.");
     debugger_entries(set, AEDEBUG_ROOTS, TechniqueId::AeDebug.label(), "AeDebug")
 }
 
 pub fn get_wer_fault_hangs(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting WerFault Hangs registry key Debug property.");
+    out!("+ Getting WerFault Hangs registry key Debug property.");
     debugger_entries(set, WER_HANGS_ROOTS, TechniqueId::WerFaultHangs.label(), "werfaultDebuggger")
 }
 
 pub fn get_cmd_autorun(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Command Processor's AutoRun property.");
+    out!("+ Getting Command Processor's AutoRun property.");
     let technique = TechniqueId::CmdAutorun.label();
     visit_roots(set, CMD_AUTORUN_ROOTS, technique, |root, _info, key, _hive| {
         key.values()
@@ -936,7 +936,7 @@ pub fn get_cmd_autorun(set: &mut HiveSet) -> Vec<Persistence> {
             .filter_map(|v| {
                 let s = string_value(v)?;
                 let path_str = format!("Name: {s}");
-                println!("\t{path_str}");
+                out!("\t{path_str}");
                 Some(persist(fmt_ts(key.timestamp()), technique, path_str, "CmdAutoRun".to_string(), root.access))
             })
             .collect()
@@ -944,34 +944,34 @@ pub fn get_cmd_autorun(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_explorer_load(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Explorer's Load property.");
+    out!("+ Getting Explorer's Load property.");
     single_value_key(set, EXPLORER_WINDOWS_ROOTS, &["Load", "Run"], TechniqueId::ExplorerLoad.label(), "ExplorerLoad")
 }
 
 pub fn get_winlogon_userinit(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Winlogon's Userinit property.");
+    out!("+ Getting Winlogon's Userinit property.");
     single_value_key(set, WINLOGON_ROOTS, &["Userinit"], TechniqueId::WinlogonUserinit.label(), "WinLogonUserInit")
 }
 
 pub fn get_winlogon_shell(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Winlogon's Shell property.");
+    out!("+ Getting Winlogon's Shell property.");
     single_value_key(set, WINLOGON_ROOTS, &["Shell"], TechniqueId::WinlogonShell.label(), "WinLogonShell")
 }
 
 pub fn get_winlogon_mpnotify(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Winlogon MPNotify property.");
+    out!("+ Getting Winlogon MPNotify property.");
     single_value_key(set, WINLOGON_ROOTS, &["mpnotify"], TechniqueId::WinlogonMpNotify.label(), "MPNotify")
 }
 
 pub fn get_app_cert_dlls(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting AppCertDlls properties.");
+    out!("+ Getting AppCertDlls properties.");
     let technique = TechniqueId::AppCertDlls.label();
     visit_control_set(set, r"Control\Session Manager\AppCertDlls", technique, |_info, key, _hive, _cs| {
         key.values()
             .iter()
             .map(|v| {
                 let path_str = format!("{} {}", v.name(), display_value(v));
-                println!("\t{path_str}");
+                out!("\t{path_str}");
                 persist(fmt_ts(key.timestamp()), technique, path_str, "AppCertDlls".to_string(), "System")
             })
             .collect()
@@ -979,7 +979,7 @@ pub fn get_app_cert_dlls(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_app_paths(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting App Paths inside the registry.");
+    out!("+ Getting App Paths inside the registry.");
     let technique = TechniqueId::AppPaths.label();
     visit_roots(set, APP_PATHS_ROOTS, technique, |root, _info, key, hive| {
         let mut entries = Vec::new();
@@ -987,7 +987,7 @@ pub fn get_app_paths(set: &mut HiveSet) -> Vec<Persistence> {
             for app_rc in apps.iter() {
                 let app = app_rc.borrow();
                 if let Some(exe) = find_default_value(&app).and_then(string_value) {
-                    println!("\t{exe}");
+                    out!("\t{exe}");
                     entries.push(persist(fmt_ts(app.timestamp()), technique, exe, app.name().to_string(), root.access));
                 }
             }
@@ -1007,7 +1007,7 @@ fn service_dll_of(svc: &KeyNode, hive: &mut HiveFile) -> Option<String> {
 }
 
 pub fn get_service_dlls(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Service DLLs inside the registry.");
+    out!("+ Getting Service DLLs inside the registry.");
     let technique = TechniqueId::ServiceDlls.label();
     visit_control_set(set, "Services", technique, |_info, services, hive, _cs| {
         let mut out = Vec::new();
@@ -1016,7 +1016,7 @@ pub fn get_service_dlls(set: &mut HiveSet) -> Vec<Persistence> {
                 let svc = svc_rc.borrow();
                 let ts = fmt_ts(svc.timestamp());
                 if let Some(dll) = service_dll_of(&svc, hive) {
-                    println!("\t{dll}");
+                    out!("\t{dll}");
                     out.push(persist(ts, technique, dll, "ServiceDlls".to_string(), "System"));
                 }
             }
@@ -1026,7 +1026,7 @@ pub fn get_service_dlls(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_gp_extension_dlls(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Group Policy Extension DLLs inside the registry.");
+    out!("+ Getting Group Policy Extension DLLs inside the registry.");
     let technique = TechniqueId::GpExtensionDlls.label();
     visit_roots(set, GP_EXTENSIONS_ROOTS, technique, |root, _info, key, hive| {
         let mut entries = Vec::new();
@@ -1034,7 +1034,7 @@ pub fn get_gp_extension_dlls(set: &mut HiveSet) -> Vec<Persistence> {
             for ext_rc in subkeys.iter() {
                 let ext = ext_rc.borrow();
                 if let Some(dll) = find_value(&ext, "DllName").and_then(string_value) {
-                    println!("\t{dll}");
+                    out!("\t{dll}");
                     entries.push(persist(fmt_ts(ext.timestamp()), technique, dll, technique.to_string(), root.access));
                 }
             }
@@ -1044,17 +1044,17 @@ pub fn get_gp_extension_dlls(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_chm_helper_dll(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting CHM Helper DLL inside the registry.");
+    out!("+ Getting CHM Helper DLL inside the registry.");
     all_values_key(set, CHM_HELPER_ROOTS, TechniqueId::ChmHelperDll.label(), "CHMHelperDll")
 }
 
 pub fn get_startup_programs(startup_files: &[PathBuf]) -> Vec<Persistence> {
-    println!("+ Checking if users' Startup folder contains interesting artifacts.");
+    out!("+ Checking if users' Startup folder contains interesting artifacts.");
     let technique = TechniqueId::StartupPrograms.label();
     startup_files
         .iter()
         .map(|program| {
-            println!("\t{}", program.display());
+            out!("\t{}", program.display());
             let mut p = persist(
                 file_mtime_string(program, true),
                 technique,
@@ -1069,7 +1069,7 @@ pub fn get_startup_programs(startup_files: &[PathBuf]) -> Vec<Persistence> {
 }
 
 pub fn get_scheduled_tasks(set: &mut HiveSet, source_evidence: Option<&Path>) -> Vec<Persistence> {
-    println!("+ Getting scheduled tasks.");
+    out!("+ Getting scheduled tasks.");
     let technique = TechniqueId::ScheduledTasks.label();
     let mut result = visit_roots(set, TASKCACHE_ROOTS, technique, |root, _info, key, hive| {
         let mut entries = Vec::new();
@@ -1077,7 +1077,7 @@ pub fn get_scheduled_tasks(set: &mut HiveSet, source_evidence: Option<&Path>) ->
             for task_rc in tasks.iter() {
                 let task = task_rc.borrow();
                 if let Some(path_val) = find_value(&task, "Path").and_then(string_value) {
-                    println!("\t{path_val}");
+                    out!("\t{path_val}");
                     entries.push(persist(fmt_ts(task.timestamp()), technique, path_val, "Scheduled Task".to_string(), root.access));
                 }
             }
@@ -1123,7 +1123,7 @@ pub fn get_scheduled_tasks(set: &mut HiveSet, source_evidence: Option<&Path>) ->
                 .map(|s| s.trim().to_string())
                 .unwrap_or_default();
             let full_cmd = if args.is_empty() { command.clone() } else { format!("{command} {args}") };
-            println!("\t{full_cmd}");
+            out!("\t{full_cmd}");
             let mut p = persist(
                 file_mtime_string(path, false),
                 "Scheduled Task (XML)",
@@ -1139,7 +1139,7 @@ pub fn get_scheduled_tasks(set: &mut HiveSet, source_evidence: Option<&Path>) ->
 }
 
 pub fn get_windows_services(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Checking Windows Services.");
+    out!("+ Checking Windows Services.");
     let technique = TechniqueId::WindowsServices.label();
     visit_control_set(set, "Services", technique, |_info, services, hive, _cs| {
         let mut out = Vec::new();
@@ -1151,7 +1151,7 @@ pub fn get_windows_services(set: &mut HiveSet) -> Vec<Persistence> {
                 let display_name = find_value(&svc, "DisplayName").and_then(string_value).unwrap_or_default();
                 if !has_service_dll {
                     if let Some(img) = find_value(&svc, "ImagePath").and_then(string_value) {
-                        println!("\t{img}");
+                        out!("\t{img}");
                         out.push(persist(ts, technique, img, display_name, "System"));
                     }
                 }
@@ -1162,7 +1162,7 @@ pub fn get_windows_services(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_user_init_mpr_script(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting users' UserInitMprLogonScript property.");
+    out!("+ Getting users' UserInitMprLogonScript property.");
     let technique = TechniqueId::UserInitMprScript.label();
     visit_roots(set, ENVIRONMENT_ROOTS, technique, |root, _info, key, _hive| {
         key.values()
@@ -1171,7 +1171,7 @@ pub fn get_user_init_mpr_script(set: &mut HiveSet) -> Vec<Persistence> {
             .filter_map(|v| {
                 let s = string_value(v)?;
                 let path_str = format!("{} {s}", v.name());
-                println!("\t{path_str}");
+                out!("\t{path_str}");
                 Some(persist(fmt_ts(key.timestamp()), technique, path_str, s, root.access))
             })
             .collect()
@@ -1179,14 +1179,14 @@ pub fn get_user_init_mpr_script(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_hhctrl_hijacking(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting the hhctrl.ocx library inside the registry.");
+    out!("+ Getting the hhctrl.ocx library inside the registry.");
     let technique = TechniqueId::HhCtrlHijacking.label();
     visit_roots(set, HHCTRL_ROOTS, technique, |root, _info, key, _hive| {
         find_default_value(key)
             .and_then(|v| string_value(v).map(|s| (v.name().to_string(), s)))
             .map(|(name, s)| {
                 let path_str = format!("{name} {s}");
-                println!("\t{path_str}");
+                out!("\t{path_str}");
                 persist(fmt_ts(key.timestamp()), technique, path_str, s, root.access)
             })
             .into_iter()
@@ -1195,7 +1195,7 @@ pub fn get_hhctrl_hijacking(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_app_init_dlls(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting AppInit_DLLs property.");
+    out!("+ Getting AppInit_DLLs property.");
     let technique = TechniqueId::AppInitDlls.label();
     visit_roots(set, APPINIT_ROOTS, technique, |root, _info, key, _hive| {
         let load_flag = find_value(key, "LoadAppInit_DLLs").and_then(dword_value).unwrap_or(1);
@@ -1215,7 +1215,7 @@ pub fn get_app_init_dlls(set: &mut HiveSet) -> Vec<Persistence> {
                 if s.trim().is_empty() {
                     return None;
                 }
-                println!("\t{s}");
+                out!("\t{s}");
                 Some(persist(fmt_ts(key.timestamp()), tech_name, root.path.to_string(), s, root.access))
             })
             .collect()
@@ -1228,7 +1228,7 @@ pub const LSA_DEFAULT_PACKAGES: &[&str] = &[
 ];
 
 pub fn get_lsa_packages(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting LSA Authentication, Security and Notification Packages.");
+    out!("+ Getting LSA Authentication, Security and Notification Packages.");
     let technique = TechniqueId::LsaPackages.label();
     let value_names = ["Authentication Packages", "Security Packages", "Notification Packages"];
     let _ = technique;
@@ -1242,7 +1242,7 @@ pub fn get_lsa_packages(set: &mut HiveSet) -> Vec<Persistence> {
                     if LSA_DEFAULT_PACKAGES.iter().any(|d| d.eq_ignore_ascii_case(pkg)) {
                         continue;
                     }
-                    println!("\t{pkg}");
+                    out!("\t{pkg}");
                     entries.push(persist(
                         ts.clone(),
                         &format!("LSA {value_name}"),
@@ -1264,7 +1264,7 @@ pub fn get_lsa_packages(set: &mut HiveSet) -> Vec<Persistence> {
                 if LSA_DEFAULT_PACKAGES.iter().any(|d| d.eq_ignore_ascii_case(pkg)) {
                     continue;
                 }
-                println!("\t{pkg}");
+                out!("\t{pkg}");
                 entries.push(persist(
                     ts.clone(),
                     "LSA Security Packages (OSConfig)",
@@ -1282,7 +1282,7 @@ pub fn get_lsa_packages(set: &mut HiveSet) -> Vec<Persistence> {
 pub const BOOT_EXECUTE_DEFAULTS: &[&str] = &["autocheck autochk *", "autocheck autochk*", ""];
 
 pub fn get_boot_execute(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting BootExecute property.");
+    out!("+ Getting BootExecute property.");
     let technique = TechniqueId::BootExecute.label();
     visit_control_set(set, r"Control\Session Manager", technique, |_info, key, _hive, cs| {
         let ts = fmt_ts(key.timestamp());
@@ -1294,7 +1294,7 @@ pub fn get_boot_execute(set: &mut HiveSet) -> Vec<Persistence> {
                     if BOOT_EXECUTE_DEFAULTS.iter().any(|d| d.eq_ignore_ascii_case(item)) {
                         continue;
                     }
-                    println!("\t{item}");
+                    out!("\t{item}");
                     entries.push(persist(
                         ts.clone(),
                         technique,
@@ -1310,7 +1310,7 @@ pub fn get_boot_execute(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_active_setup(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Active Setup Installed Components.");
+    out!("+ Getting Active Setup Installed Components.");
     let technique = TechniqueId::ActiveSetup.label();
     visit_roots(set, ACTIVE_SETUP_ROOTS, technique, |root, _info, key, hive| {
         let mut entries = Vec::new();
@@ -1322,7 +1322,7 @@ pub fn get_active_setup(set: &mut HiveSet) -> Vec<Persistence> {
                     if stub.is_empty() {
                         continue;
                     }
-                    println!("\t{stub}");
+                    out!("\t{stub}");
                     entries.push(persist(
                         fmt_ts(comp.timestamp()),
                         technique,
@@ -1338,7 +1338,7 @@ pub fn get_active_setup(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_screensaver(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Screensaver persistence.");
+    out!("+ Getting Screensaver persistence.");
     let technique = TechniqueId::Screensaver.label();
     visit_roots(set, SCREENSAVER_ROOTS, technique, |root, info, key, _hive| {
         find_value(key, "SCRNSAVE.EXE")
@@ -1346,7 +1346,7 @@ pub fn get_screensaver(set: &mut HiveSet) -> Vec<Persistence> {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .map(|s| {
-                println!("\t{s}");
+                out!("\t{s}");
                 persist(fmt_ts(key.timestamp()), technique, info.path.to_string_lossy().to_string(), s, root.access)
             })
             .into_iter()
@@ -1355,7 +1355,7 @@ pub fn get_screensaver(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_silent_process_exit(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting SilentProcessExit persistence.");
+    out!("+ Getting SilentProcessExit persistence.");
     let technique = TechniqueId::SilentProcessExit.label();
     visit_roots(set, SILENT_PROCESS_EXIT_ROOTS, technique, |root, _info, key, hive| {
         let mut entries = Vec::new();
@@ -1367,7 +1367,7 @@ pub fn get_silent_process_exit(set: &mut HiveSet) -> Vec<Persistence> {
                     if proc_.is_empty() {
                         continue;
                     }
-                    println!("\t{} -> {proc_}", mon.name());
+                    out!("\t{} -> {proc_}", mon.name());
                     entries.push(persist(
                         fmt_ts(mon.timestamp()),
                         technique,
@@ -1383,7 +1383,7 @@ pub fn get_silent_process_exit(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_com_hijacking(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting COM Object hijacking (HKCU Classes).");
+    out!("+ Getting COM Object hijacking (HKCU Classes).");
     let technique = TechniqueId::ComHijacking.label();
     visit_roots(set, COM_CLSID_ROOTS, technique, |root, _info, key, hive| {
         let mut entries = Vec::new();
@@ -1400,7 +1400,7 @@ pub fn get_com_hijacking(set: &mut HiveSet) -> Vec<Persistence> {
                             if dll.is_empty() {
                                 continue;
                             }
-                            println!("\t{} -> {dll}", clsid.name());
+                            out!("\t{} -> {dll}", clsid.name());
                             entries.push(persist(
                                 fmt_ts(server.timestamp()),
                                 technique,
@@ -1426,7 +1426,7 @@ pub const STANDARD_PRINT_MONITORS: &[&str] = &[
 ];
 
 pub fn get_print_monitors(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Print Monitors.");
+    out!("+ Getting Print Monitors.");
     let technique = TechniqueId::PrintMonitors.label();
     visit_control_set(set, r"Control\Print\Monitors", technique, |_info, mon_key, hive, cs| {
         let mut out = Vec::new();
@@ -1438,7 +1438,7 @@ pub fn get_print_monitors(set: &mut HiveSet) -> Vec<Persistence> {
                     continue;
                 }
                 let driver = find_value(&sub, "Driver").and_then(string_value).unwrap_or_else(|| name.to_string());
-                println!("\t{name} -> {driver}");
+                out!("\t{name} -> {driver}");
                 out.push(persist(
                     fmt_ts(sub.timestamp()),
                     technique,
@@ -1455,7 +1455,7 @@ pub fn get_print_monitors(set: &mut HiveSet) -> Vec<Persistence> {
 pub const STANDARD_TIME_PROVIDER_DLLS: &[&str] = &["w32time.dll", "vmictimeprovider.dll"];
 
 pub fn get_time_providers(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting W32Time Time Providers.");
+    out!("+ Getting W32Time Time Providers.");
     let technique = TechniqueId::TimeProviders.label();
     visit_control_set(set, r"Services\W32Time\TimeProviders", technique, |_info, tp_key, hive, cs| {
         let mut out = Vec::new();
@@ -1468,7 +1468,7 @@ pub fn get_time_providers(set: &mut HiveSet) -> Vec<Persistence> {
                     if STANDARD_TIME_PROVIDER_DLLS.iter().any(|s| lower.ends_with(s)) {
                         continue;
                     }
-                    println!("\t{name} -> {dll}");
+                    out!("\t{name} -> {dll}");
                     out.push(persist(
                         fmt_ts(sub.timestamp()),
                         technique,
@@ -1484,14 +1484,14 @@ pub fn get_time_providers(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_netsh_helper_dlls(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Getting Netsh Helper DLLs.");
+    out!("+ Getting Netsh Helper DLLs.");
     let technique = TechniqueId::NetshHelperDlls.label();
     visit_roots(set, NETSH_ROOTS, technique, |root, _info, key, _hive| {
         key.values()
             .iter()
             .filter_map(|v| {
                 let s = string_value(v)?;
-                println!("\t{} -> {s}", v.name());
+                out!("\t{} -> {s}", v.name());
                 Some(persist(
                     fmt_ts(key.timestamp()),
                     technique,
@@ -1505,7 +1505,7 @@ pub fn get_netsh_helper_dlls(set: &mut HiveSet) -> Vec<Persistence> {
 }
 
 pub fn get_powershell_profiles(source: &Path) -> Vec<Persistence> {
-    println!("+ Checking for PowerShell Profile scripts...");
+    out!("+ Checking for PowerShell Profile scripts...");
     let technique = TechniqueId::PowerShellProfiles.label();
     let mut result = Vec::new();
     for entry in WalkDir::new(source).into_iter().flatten() {
@@ -1515,7 +1515,7 @@ pub fn get_powershell_profiles(source: &Path) -> Vec<Persistence> {
         }
         let fname = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
         if fname.ends_with("profile.ps1") {
-            println!("\tFound PowerShell profile: {}", path.display());
+            out!("\tFound PowerShell profile: {}", path.display());
             let mut p = persist(
                 file_mtime_string(path, false),
                 technique,
@@ -1531,7 +1531,7 @@ pub fn get_powershell_profiles(source: &Path) -> Vec<Persistence> {
 }
 
 pub fn get_terminal_profile_start_on_user_login(settings_files: &[PathBuf]) -> Vec<Persistence> {
-    println!("+ Checking if users' Windows Terminal Profile's settings.json contains a startOnUserLogin value.");
+    out!("+ Checking if users' Windows Terminal Profile's settings.json contains a startOnUserLogin value.");
     let technique = TechniqueId::TerminalProfileStartOnUserLogin.label();
     let mut result = Vec::new();
     for file in settings_files {
@@ -1560,7 +1560,7 @@ pub fn get_terminal_profile_start_on_user_login(settings_files: &[PathBuf]) -> V
                 .and_then(|v| v.as_str())
                 .unwrap_or("N/A")
                 .to_string();
-            println!("\t{commandline}");
+            out!("\t{commandline}");
             let mut p = persist(
                 file_mtime_string(file, false),
                 technique,
@@ -1578,7 +1578,7 @@ pub fn get_terminal_profile_start_on_user_login(settings_files: &[PathBuf]) -> V
 // ─── File discovery ─────────────────────────────────────────────────────────
 
 pub fn get_settings_json_files(source: &Path) -> Vec<PathBuf> {
-    println!("+ Searching for settings.json files...");
+    out!("+ Searching for settings.json files...");
     let mut files = Vec::new();
     for entry in WalkDir::new(source).into_iter().flatten() {
         let path = entry.path();
@@ -1591,18 +1591,18 @@ pub fn get_settings_json_files(source: &Path) -> Vec<PathBuf> {
                 .unwrap_or(false)
         });
         if is_terminal {
-            println!("\tFound settings.json: {}", path.display());
+            out!("\tFound settings.json: {}", path.display());
             files.push(path.to_path_buf());
         }
     }
     if files.is_empty() {
-        println!("No settings.json files found.");
+        out!("No settings.json files found.");
     }
     files
 }
 
 pub fn get_startup_files(source: &Path) -> Vec<PathBuf> {
-    println!("+ Searching for startup files...");
+    out!("+ Searching for startup files...");
     let mut files = Vec::new();
     for entry in WalkDir::new(source).into_iter().flatten() {
         let path = entry.path();
@@ -1615,12 +1615,12 @@ pub fn get_startup_files(source: &Path) -> Vec<PathBuf> {
             .map(|n| n.to_string_lossy().eq_ignore_ascii_case("Startup"))
             .unwrap_or(false);
         if in_startup {
-            println!("\tFound startup file: {}", path.display());
+            out!("\tFound startup file: {}", path.display());
             files.push(path.to_path_buf());
         }
     }
     if files.is_empty() {
-        println!("No startup files found.");
+        out!("No startup files found.");
     }
     files
 }

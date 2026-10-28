@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560" role="img" aria-label="Faramir run on a Cortex XDR offline collector package">
+  <defs>
+    <style>
+      text { font-family: Consolas, "Cascadia Mono", Menlo, "DejaVu Sans Mono", monospace; font-size: 14.5px; white-space: pre; }
+      .dim { fill: #8a9bb0; }
+      .fg { fill: #e6edf3; }
+      .ok { fill: #7ee787; }
+      .info { fill: #79c0ff; }
+      .warn { fill: #e3b341; }
+      .hit { fill: #ffa657; }
+      .cmd { fill: #e6edf3; }
+      .line { opacity: 0; }
+    </style>
+  </defs>
+  <rect width="980" height="560" rx="12" fill="#0d1117"/>
+  <rect x="0" y="0" width="980" height="34" rx="12" fill="#161b22"/>
+  <rect x="0" y="20" width="980" height="14" fill="#161b22"/>
+  <circle cx="20" cy="17" r="6" fill="#ff5f56"/>
+  <circle cx="40" cy="17" r="6" fill="#ffbd2e"/>
+  <circle cx="60" cy="17" r="6" fill="#27c93f"/>
+  <text x="490" y="22" text-anchor="middle" class="dim">faramir</text>
+
+  <g transform="translate(20 62)">
+    <!-- command, typed -->
+    <text y="0" class="ok">$ </text>
+    <text x="18" y="0" class="cmd">faramir -f D:\cases\offline_collector_output_WS01_2026-10-28_12-00-00.zip -o WS01.csv --verbose</text>
+    <rect x="18" y="-14" width="900" height="20" fill="#0d1117">
+      <animate attributeName="x" from="18" to="920" dur="2.2s" begin="0.3s" fill="freeze" calcMode="linear"/>
+    </rect>
+
+    <g class="line"><animate attributeName="opacity" to="1" dur="0.01s" begin="2.8s" fill="freeze"/>
+      <text y="30" class="fg">Faramir v0.3.0 - DFIR Persistence Hunting Tool</text>
+      <text y="48" class="dim">==================================================</text>
+    </g>
+    <g class="line"><animate attributeName="opacity" to="1" dur="0.01s" begin="3.4s" fill="freeze"/>
+      <text y="78" class="fg">Discovered 1 forensic archive(s) / triage packages...</text>
+      <text y="96" class="fg">  [1/1] Unpacking triage: offline_collector_output_WS01_2026-10-28_12-00-00.zip <tspan class="info">[Cortex XDR, host WS01]</tspan></text>
+    </g>
+    <g class="line"><animate attributeName="opacity" to="1" dur="0.01s" begin="4.2s" fill="freeze"/>
+      <text y="120" class="dim">  Unpacking nested archive: output\registry_hives-collection\script_output.zip</text>
+      <text y="138" class="dim">  Unpacking nested archive: output\event_log-parsing\script_output.zip</text>
+    </g>
+    <g class="line"><animate attributeName="opacity" to="1" dur="0.01s" begin="5.0s" fill="freeze"/>
+      <text y="166" class="fg">Detected Windows target <tspan class="info">[WS01]</tspan> (5 hive(s))</text>
+      <text y="184" class="dim">    ...\entry_40_0\SYSTEM [SYSTEM] (dirty)</text>
+      <text y="202" class="dim">    ...\entry_50_0\NTUSER.DAT [NTUSER.DAT] (dirty)</text>
+      <text y="220" class="dim">    ...\entry_52_0\NTUSER.DAT [NTUSER.DAT] (dirty)</text>
+    </g>
+    <g class="line"><animate attributeName="opacity" to="1" dur="0.01s" begin="5.9s" fill="freeze"/>
+      <text y="248" class="warn">      [!] Dirty hive detected, applying transaction logs...</text>
+      <text y="266" class="fg">        -> Applying ...\entry_53_0\NTUSER.DAT.LOG1</text>
+      <text y="284" class="info">[INFO]  [ERR_WIN_HIVE_RECOVERED - 3048] Dirty hive rebuilt from transaction logs: ...\entry_50_0\NTUSER.DAT</text>
+    </g>
+    <g class="line"><animate attributeName="opacity" to="1" dur="0.01s" begin="6.9s" fill="freeze"/>
+      <text y="312" class="fg">+ Getting Run Persistence</text>
+      <text y="330" class="hit">    C:\Users\bob\bob.exe</text>
+      <text y="348" class="hit">    C:\ProgramData\updater.exe</text>
+    </g>
+    <g class="line"><animate attributeName="opacity" to="1" dur="0.01s" begin="7.7s" fill="freeze"/>
+      <text y="376" class="fg">+ Checking Windows Services.</text>
+      <text y="394" class="hit">    C:\Windows\Temp\evilsvc.exe</text>
+    </g>
+    <g class="line"><animate attributeName="opacity" to="1" dur="0.01s" begin="8.5s" fill="freeze"/>
+      <text y="422" class="fg">+ Recovering deleted registry keys and values.</text>
+      <text y="440" class="hit">    [deleted value] Dropper = C:\Users\Public\d.exe -s</text>
+    </g>
+    <g class="line"><animate attributeName="opacity" to="1" dur="0.01s" begin="9.4s" fill="freeze"/>
+      <text y="468" class="ok">Total persistence events collected: 7</text>
+      <text y="486" class="ok">Diagnostics: 0 error(s), 0 warning(s), 14 info(s)</text>
+    </g>
+    <g class="line"><animate attributeName="opacity" to="1" dur="0.01s" begin="9.9s" fill="freeze"/>
+      <text y="486" x="500" class="dim">-> WS01.csv</text>
+    </g>
+    <rect x="0" y="-13" width="9" height="18" fill="#e6edf3">
+      <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="-13;-13;473" keyTimes="0;0.94;1" dur="10.1s" begin="0s" fill="freeze"/>
+      <animate attributeName="opacity" to="0" dur="0.01s" begin="0.3s" fill="freeze"/>
+      <animate attributeName="opacity" values="1;0;1" dur="1s" begin="9.9s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+</svg>

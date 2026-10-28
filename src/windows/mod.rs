@@ -1,5 +1,14 @@
 //! Windows persistence engine: hive handling and every registry/filesystem technique.
 
+/// `println!` that honours `--silent` (see [`diag::set_quiet`]).
+macro_rules! out {
+    ($($t:tt)*) => {
+        if !$crate::windows::diag::is_quiet() {
+            println!($($t)*);
+        }
+    };
+}
+
 pub mod deleted;
 pub mod diag;
 pub mod hives;

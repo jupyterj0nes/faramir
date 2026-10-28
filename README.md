@@ -1,126 +1,172 @@
-<div align="center">
+<p align="center"><img src="docs/faramir.svg" alt="Faramir" width="720"></p>
 
-# ⚔️ Faramir
+<p align="center">
+<img src="https://img.shields.io/badge/Rust-stable-orange?logo=rust" alt="Rust">
+<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue" alt="Platform">
+<img src="https://img.shields.io/badge/tests-906%20passing-brightgreen" alt="Tests">
+<img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey" alt="License">
+</p>
 
-**Persistence hunting for DFIR, from any evidence you have.**
+**Faramir** is a persistence hunting tool for DFIR. It takes a forensic image, a triage package or a mounted volume, extracts the Windows registry hives and Linux configuration it needs, rebuilds dirty hives from their transaction logs, and writes a timeline of every autostart, hijack and backdoor it finds. Windows and Linux, one binary, no dependencies.
 
-Point it at a disk image, a triage zip or a mounted drive. Get back one timeline
-of every autostart, hijack and backdoor on the box, Windows and Linux, ready for
-[Masstin](https://github.com/jupyterj0nes/masstin) and [Caarea](https://github.com/jupyterj0nes/caarea).
+It is the Rust successor of [Boromir](https://github.com/Alexgpsec/Persistence_Boromir), Alejandro Gamboa's Python persistence hunter. *The younger brother, wiser and swifter... and alive!*
 
-![Rust](https://img.shields.io/badge/Rust-stable-orange?logo=rust)
-![Platforms](https://img.shields.io/badge/evidence-Windows%20%7C%20Linux-blue)
-![Tests](https://img.shields.io/badge/tests-906%20passing-brightgreen)
-![License](https://img.shields.io/badge/license-GPL--3.0-lightgrey)
+## Table of contents
 
-> *"The younger brother, wiser and swifter."* Faramir is the Rust rewrite of
-> [Boromir](https://github.com/Alexgpsec/Persistence_Boromir): a single binary,
-> no runtime, native speed, and it reads the evidence itself instead of asking
-> you to mount it.
+- [Features](#features)
+- [Demo](#demo)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Examples](#examples)
+- [Supported evidence](#supported-evidence)
+- [Detected techniques](#detected-techniques)
+- [Output](#output)
+- [Diagnostics](#diagnostics)
+- [How it works](#how-it-works)
+- [Testing](#testing)
+- [Credits](#credits)
+- [License](#license)
 
-</div>
+## Features
 
----
+- **Reads the evidence itself.** E01, raw, VMDK, VHD/VHDX images, KAPE, Velociraptor, Cortex XDR, CyLR and UAC packages, nested archives, mounted volumes or a single hive. No mounting, no manual extraction.
+- **Rebuilds dirty hives.** Finds `.LOG1`/`.LOG2` wherever the collector left them, checks they belong to the hive, validates every entry and replays them. Verified byte for byte against `rla.exe`.
+- **35 Windows techniques**, each read from the hive it lives in: HKLM `SOFTWARE`/`SYSTEM`, every `NTUSER.DAT`, `DEFAULT` and `UsrClass.dat`, including `Wow6432Node` variants.
+- **Linux persistence**: cron, systemd, shell profiles, SSH, sudoers, PAM, udev, kernel modules, package hooks, `ld.so.preload` and live-process anomalies.
+- **Deleted persistence**: keys and values recovered from freed hive cells, plus anything that existed in a Volume Shadow Copy but is gone from the live volume.
+- **One CSV timeline** with the same columns as [masstin](https://github.com/jupyterj0nes/masstin), so persistence and lateral movement from the same case concatenate.
+- **Nothing silent**: 90+ numbered diagnostic codes with a severity; a corrupt log, a renamed hive or a parser panic is reported and the run goes on.
 
-## Why Faramir
+## Demo
 
-| | What it means for you |
+<p align="center"><img src="docs/demo.svg" alt="Faramir processing a Cortex XDR offline collector package" width="100%"></p>
+
+A Cortex XDR offline-collector package with four dirty hives. The transaction logs sit in other `entry_` folders; Faramir locates them, matches each one to its hive, replays them, and then recovers a deleted Run value the attacker had cleaned up.
+
+## Installation
+
+### Binaries
+
+Download the latest build from the [Releases page](../../releases/latest):
+
+| File | Platform |
 |---|---|
-| **One command, any evidence** | `.E01`, raw `dd`, KAPE / Velociraptor / Cortex XDR / UAC packages, nested zips, a mounted volume or a single hive. Faramir detects what it was given, stages it and runs. |
-| **Dirty hives are rebuilt, not ignored** | Live-collected hives carry their last writes only in `.LOG1`/`.LOG2`. Faramir finds those logs wherever the collector put them, verifies they belong to the hive, and replays them. The result is byte-identical to Eric Zimmerman's `rla.exe`. |
-| **60+ techniques, each read from the right hive** | Every registry path is declared relative to its root (`HKLM\SOFTWARE`, `HKLM\SYSTEM`, `HKCU`, `UsrClass`), so a Run key is read from `NTUSER.DAT` as HKCU and from `SOFTWARE` as HKLM, never the other way round. |
-| **Nothing fails silently** | 90+ numbered diagnostic codes with a severity. A corrupt log, a renamed hive, a technique with no hive to read: you are told, the run finishes anyway. |
-| **Drops straight into your timeline** | The CSV has the same ten columns as Masstin and Caarea, so persistence sits next to logons and lateral movement in one view. |
+| `faramir-<version>-windows-x64.zip` | Windows 10/11, Server 2016+ |
+| `faramir-<version>-linux-x64.tar.gz` | Linux x86_64 (glibc) |
 
----
+Unzip and run. There is no installer and no runtime to install.
 
-## Quick start
+### From source
+
+Requires stable Rust (pinned by `rust-toolchain.toml`).
 
 ```bash
-cargo build --release          # Rust stable, pinned by rust-toolchain.toml
+git clone https://github.com/Alexgpsec/faramir.git
+cd faramir
+cargo build --release
+# binary at target/release/faramir  (faramir.exe on Windows)
 ```
 
+## Usage
+
+```
+faramir [OPTIONS] [ACTION]
+```
+
+| Option | Description |
+|---|---|
+| `-d, --directory <DIR>` | Directory to process: mounted volume, extracted collection, folder of images or packages. Repeatable. |
+| `-f, --file <FILE>` | File to process: disk image, archive, single hive or Linux artifact. Repeatable. |
+| `-o, --output <FILE>` | Output CSV. Default `faramir.output.csv`. |
+| `--verbose` | Also print informational diagnostics (companion files skipped, logs matched outside the hive folder, hives rebuilt). |
+| `--silent` | No console output. |
+| `--source-evidence <DIR>`, `--csv-output <DIR>` | Legacy Boromir flags, still accepted. |
+| `[ACTION]` | `all` (default), any `get-*` technique from the tables below, `get-deleted-persistence`, `get-linux-persistence`. |
+
+## Examples
+
+**A forensic image.** Partitions are found (MBR and GPT), the registry, user hives and tasks are pulled out of NTFS, every Volume Shadow Copy is processed too:
+
 ```bash
-# A forensic image
 faramir -f /cases/HRSERVER.E01 -o /cases/hrserver_persistence.csv
+```
 
-# A KAPE, Velociraptor, Cortex XDR or UAC package (nested zips included)
-faramir -f /cases/offline_collector_output_WS01_2026-10-28_12-00-00.zip -o ws01.csv
+**A virtual disk** from a hypervisor export:
 
-# A mounted volume, Windows or Linux
-faramir -d /mnt/evidence/C -o persistence.csv
+```bash
+faramir -f /cases/DC01-flat.vmdk -o dc01.csv        # VMDK descriptor or extent
+faramir -f /cases/FS02.vhdx -o fs02.csv             # dynamic VHDX
+```
 
-# A single hive you carved out by hand, with its logs next to it
+**A triage package.** The type and host name are detected from the package itself; nested zips are expanded:
+
+```bash
+faramir -f /cases/triage/WS01_20261028_120000.zip -o ws01.csv                                       # KAPE
+faramir -f /cases/triage/Collection-SRV-DC01-2026-10-28T12_00_00Z.zip -o dc01.csv                   # Velociraptor
+faramir -f /cases/triage/offline_collector_output_WS01_2026-10-28_12-00-00.zip -o ws01.csv          # Cortex XDR
+faramir -f /cases/triage/uac-web01-linux-20261028120000.tar.gz -o web01.csv                         # UAC (Linux)
+```
+
+**A whole folder of evidence.** Every image and package under the folder is processed, each with its own host name:
+
+```bash
+faramir -d /cases/incident-4711/triages -o incident-4711.csv
+```
+
+**A mounted volume**, Windows or Linux:
+
+```bash
+faramir -d E:\ -o persistence.csv
+faramir -d /mnt/suspect_root -o persistence.csv
+```
+
+**A single hive**, with its transaction logs next to it:
+
+```bash
 faramir -f /cases/SOFTWARE -o software.csv
+faramir -f "/cases/bob_NTUSER.DAT" -o bob.csv
+```
 
-# One technique only
+**One technique only:**
+
+```bash
 faramir -d /mnt/evidence/C get-run
+faramir -d /mnt/evidence/C get-scheduled-tasks
+faramir -f /cases/HRSERVER.E01 get-deleted-persistence
 ```
 
-Several `-d` / `-f` can be combined in one run; every finding carries the host
-it came from.
+**Several hosts in one run**, then merge with a masstin timeline:
 
----
-
-## What happens when you run it
-
-```
- evidence ──► detect & stage ──► find hives ──► rebuild dirty hives ──► 35 Windows techniques ──► timeline.csv
-   E01 ─┐      KAPE / Velociraptor      name + regf      locate LOG1/LOG2       + Linux suite         Masstin / Caarea
-   zip ─┤      Cortex XDR / UAC        header sniff     verify by header         per-root paths        10 columns
-   dir ─┘      nested archives         any file name    validate HvLE
+```bash
+faramir -f ws01.zip -f ws02.zip -f srv-dc01.E01 -o persistence.csv
+masstin -a parse-windows -d /cases/logs -o lateral.csv
+tail -n +2 persistence.csv >> lateral.csv
 ```
 
-1. **Detect & stage.** Images are opened directly (EWF/E01 or raw), NTFS is
-   parsed, and the registry, user hives, event logs, Amcache and scheduled tasks
-   are pulled out. Archives are unpacked keeping only forensic artifacts;
-   nested archives such as Cortex XDR's `script_output.zip` per module are
-   expanded in place. Known forensic zip passwords (`infected`, …) are tried.
-2. **Find hives.** A file is a hive if its name says so *or* its header does.
-   `bob_NTUSER.DAT`, `HOST-SOFTWARE`, `C_Windows_System32_config_SYSTEM`,
-   `SOFTWARE.hve` and `artifact_0017.bin` are all recognised; the kind comes from
-   the path Windows embeds in the regf base block.
-3. **Rebuild dirty hives.** See [Transaction logs](#transaction-logs-the-part-everyone-gets-wrong).
-4. **Hunt.** Each technique runs against the hives of the kind it needs; a hive
-   of unknown kind is tried against every root so a renamed hive never loses a
-   detection. Parser panics on corrupt data are caught per hive and per
-   technique.
-5. **Timeline.** Findings become events sorted by time, one host name per
-   evidence source (taken from the collector's own naming when available).
+**See what could and could not be read:**
 
----
+```bash
+faramir -f /cases/WS01.zip -o ws01.csv --verbose
+```
 
-## Transaction logs: the part everyone gets wrong
+## Supported evidence
 
-A hive copied from a running system is almost always *dirty*: its primary and
-secondary sequence numbers differ and the most recent keys only exist in
-`.LOG1` / `.LOG2`. Skip the logs and the last autostart the attacker wrote is
-simply not there.
+| Input | Handling |
+|---|---|
+| `.E01` / `.Ex01` | EWF reader, NTFS parsed in place. MBR and GPT partitions; BitLocker volumes reported and skipped; every Volume Shadow Copy extracted and diffed against the live volume. |
+| `.dd` `.raw` `.img` `.001` | Raw and split-raw images. |
+| `.vmdk` | Monolithic or split, sparse or flat, streamOptimized (compressed). Snapshots, `-flat` and `-sNNN` extents are read through their descriptor. |
+| `.vhd` `.vhdx` | Fixed and dynamic. Differencing disks are reported as incomplete. |
+| `.zip` `.tar` `.tar.gz` `.tgz` | Only forensic artifacts are extracted. Nested archives are expanded in place. Encrypted zips are tried with the usual forensic passwords. |
+| KAPE, Velociraptor, Cortex XDR, CyLR, UAC | Detected from their markers; the host name comes from the package. |
+| Directory | Mounted volume or already-extracted collection, Windows or Linux. |
+| Single file | A hive (with its logs beside it), a systemd unit, a crontab, a shell profile. |
 
-Collectors make this hard. Image extraction renames user hives
-(`bob_NTUSER.DAT`), flattened collectors produce
-`C_Windows_System32_config_SOFTWARE.LOG1`, Cortex XDR puts every file in its own
-`entry_<N>_<M>/` folder so hive and log are never adjacent, and ten users give
-you ten identical `NTUSER.DAT.LOG1`.
+Hives are recognised by name **and** by header, so `bob_NTUSER.DAT`, `HOST-SOFTWARE`, `C_Windows_System32_config_SYSTEM`, `SOFTWARE.hve` or `artifact_0017.bin` all work.
 
-Faramir handles all of it:
+## Detected techniques
 
-| Step | What Faramir does | Diagnostic |
-|---|---|---|
-| Locate | Looks next to the hive, then indexes every `.LOG1`/`.LOG2` under the evidence root and ranks candidates by name and path similarity | `ERR_WIN_TX_LOG_REMOTE_MATCH` |
-| Attribute | Compares the hive name embedded in the log's base block with the hive's own, so another user's log is rejected | `ERR_WIN_TX_LOG_HIVE_MISMATCH` |
-| Validate | Checks every `HvLE` entry (sizes, page references, sequence chain) before the parser sees it; a damaged tail is cut and the valid prefix replayed | `ERR_WIN_TX_LOG_TRUNCATED`, `ERR_WIN_TX_LOG_PARTIAL` |
-| Replay | Applies LOG1 and LOG2 in sequence order, reconciling the chain across both files | `ERR_WIN_HIVE_RECOVERED` |
-| Degrade | If nothing usable exists the hive is still scanned in its on-disk state and you are told exactly why | `ERR_WIN_TX_LOG_NOT_FOUND`, `ERR_WIN_HIVE_DIRTY` |
-
-The test-suite replays a real Windows 10 dirty hive and compares the result
-with `rla.exe` byte for byte.
-
----
-
-## Windows techniques
-
-Run everything with `all` (the default) or pick one action.
+### Windows
 
 | Area | Action | What is read | MITRE |
 |---|---|---|---|
@@ -154,79 +200,47 @@ Run everything with `all` (the default) or pick one action.
 | | `get-aedebug` | AeDebug `Debugger` / `ReflectDebugger` | T1546 |
 | | `get-wer-fault-hangs` | WER Hangs debugger (HKLM and HKCU) | T1546 |
 | | `get-silent-process-exit` | `MonitorProcess` | T1546.012 |
+| **Removed** | `get-deleted-persistence` | Keys and values recovered from freed hive cells, placed back on their path and matched against the locations above | |
+| | *(automatic on images)* | Items present in a Volume Shadow Copy but gone from the live volume | |
 
-Every HKCU path is also read from the `DEFAULT` hive (what SYSTEM-context
-logons see), every `SOFTWARE` path from `Wow6432Node` where it exists.
+### Linux
 
-### What the attacker removed
-
-Two more sources run inside `all` and never need an extra flag:
-
-| Source | Action | What it finds |
-|---|---|---|
-| **Deleted cells** | `get-deleted-persistence` | Keys and values whose cells were freed but not yet overwritten, walked with a bounds-checked parser of every hive bin. A deleted key is placed back on its path through the parent chain and matched against the persistence locations above; orphan deleted values are kept when their data looks like a command line. Reported as `windows:persistence:deleted:<technique>`. |
-| **Volume Shadow Copies** | automatic on images | Every snapshot of an NTFS partition is extracted like the live volume (`partition_<n>_vss_<m>/`). A persistence item that exists in a snapshot but not on the live volume is reported once, as `windows:persistence:removed_since_vss:<technique>`, with the snapshot's creation time. |
-
----
-
-## Linux techniques
-
-`get-linux-persistence` (included in `all`) runs on a mounted root, a UAC
-package or any folder with the usual `etc/`, `var/`, `home/` layout.
+`get-linux-persistence` runs on a mounted root, a UAC package or any folder with the usual `etc/`, `var/`, `home/` layout.
 
 | Area | Artifacts |
 |---|---|
-| **Scheduled** | `/etc/crontab`, `cron.d`, user spools, `cron.{hourly,daily,weekly,monthly}`, anacron |
-| **systemd** | services, timers, sockets, paths, generators |
-| **Shell & session** | `/etc/profile`, `profile.d`, `bashrc` / `zshrc` / `.profile`, `rc.local`, XDG autostart |
-| **Credentials & access** | `authorized_keys`, `AuthorizedKeysCommand`, `ForceCommand`, sudoers `NOPASSWD` and `Defaults` overrides, PAM `pam_exec` backdoors, `pam_permit` bypasses, custom module paths |
-| **Kernel & libraries** | `ld.so.preload`, `modules-load.d`, `modprobe.d` `install` commands, udev `RUN` actions |
-| **Package manager** | APT hooks |
-| **Live state** | processes running a deleted binary, execution from `/tmp` |
-
----
-
-## Evidence formats
-
-| Input | How it is handled |
-|---|---|
-| `.E01` / `.Ex01` | Opened with the EWF reader, NTFS parsed in place; MBR and GPT partitions, BitLocker volumes reported and skipped, every Volume Shadow Copy extracted and diffed against the live volume |
-| `.dd` `.raw` `.img` `.001` | Raw and split-raw images |
-| `.vmdk` | Monolithic or split, sparse or flat, streamOptimized (compressed); snapshots, `-flat` and `-sNNN` extents are read through their descriptor |
-| `.vhd` `.vhdx` | Fixed and dynamic; differencing disks are reported as incomplete |
-| `.zip` `.tar` `.tar.gz` `.tgz` | Only forensic artifacts are extracted; nested archives expanded in place; encrypted zips tried with known forensic passwords |
-| KAPE, Velociraptor, Cortex XDR, CyLR, UAC | Detected from their markers; the host name is taken from the package |
-| Directory | Mounted volume or already-extracted collection, Windows or Linux |
-| Single file | A hive (with its logs beside it), a systemd unit, a crontab, a profile |
-
----
+| Scheduled | `/etc/crontab`, `cron.d`, user spools, `cron.{hourly,daily,weekly,monthly}`, anacron |
+| systemd | services, timers, sockets, paths, generators |
+| Shell and session | `/etc/profile`, `profile.d`, `bashrc` / `zshrc` / `.profile`, `rc.local`, XDG autostart |
+| Credentials and access | `authorized_keys`, `AuthorizedKeysCommand`, `ForceCommand`, sudoers `NOPASSWD` and `Defaults` overrides, PAM `pam_exec` backdoors, `pam_permit` bypasses, custom module paths |
+| Kernel and libraries | `ld.so.preload`, `modules-load.d`, `modprobe.d` `install` commands, udev `RUN` actions |
+| Package manager | APT hooks |
+| Live state | processes running a deleted binary, execution from `/tmp` |
 
 ## Output
 
-One CSV, ten columns, the same schema as Masstin and Caarea:
+One CSV, ten columns, the same schema masstin writes:
 
 | Column | Example |
 |---|---|
 | `timestamp` | `2024-01-17 21:20:00.000` (key last-write time) |
 | `computer` | `WS01` |
-| `artifact` | `windows:persistence:registry_run_key`, `linux:ssh:authorized_key` |
+| `artifact` | `windows:persistence:registry_run_key`, `windows:persistence:deleted:windows_service`, `windows:persistence:removed_since_vss:registry_run_key`, `linux:ssh:authorized_key` |
 | `event_id` / `pid` | `0` for persistence rows |
 | `subject_username` / `target_username` | `System`, `User`, `root` |
 | `processname` | `updater.exe` |
 | `commandline` | `C:\ProgramData\updater.exe --silent` |
-| `parentprocessname` | Where it was found: the hive path, the key, the unit file |
+| `parentprocessname` | Where it was found: the hive path, the key, the unit file, the snapshot |
 
 ```
 "2026-10-28 12:00:00.000","WS01","windows:persistence:registry_run_key",0,0,"User","User","bob.exe","C:\Users\bob\bob.exe","…\entry_50_0\NTUSER.DAT"
 "2026-10-28 12:00:00.000","WS01","windows:persistence:windows_service",0,0,"System","System","EvilSvc","EvilSvc","C:\Windows\Temp\evilsvc.exe"
+"","WS01","windows:persistence:deleted:deleted_registry_persistence",0,0,"Unknown","Unknown","d.exe","C:\Users\Public\d.exe -s","deleted value Dropper (key unknown)"
 ```
-
----
 
 ## Diagnostics
 
-Everything that degrades a run is printed to stderr with a code, a number and
-a severity, and summarised at the end:
+Anything that degrades a run is printed to stderr with a code, a number and a severity, and summarised at the end:
 
 ```
 [WARN]  [ERR_WIN_TX_LOG_NOT_FOUND - 3028] Dirty hive but no .LOG1/.LOG2 could be located for: …\SYSTEM
@@ -240,60 +254,31 @@ a severity, and summarised at the end:
 | `WARN` | Processed in degraded mode (dirty hive without logs, control set missing, parser panic caught) |
 | `INFO` | Nothing lost (companion file skipped, log matched outside the hive folder, hive rebuilt). Shown with `--verbose` |
 
-The catalogue lives in `src/errors.rs`: `1xxx` system, `2xxx` ingestion,
-`3xxx` Windows registry, `4xxx` Linux, `5xxx` output, `6xxx` CLI.
+The catalogue is in `src/errors.rs`: `1xxx` system, `2xxx` ingestion, `3xxx` Windows registry, `4xxx` Linux, `5xxx` output, `6xxx` CLI.
 
----
+## How it works
 
-## Options
+**Transaction logs.** A hive copied from a running system is almost always dirty: the last writes only exist in `.LOG1` / `.LOG2`. Faramir looks for the logs next to the hive, then anywhere under the evidence root, ranks the candidates by name and path, and keeps only the ones whose embedded hive name matches (so another user's `NTUSER.DAT.LOG1` is rejected). Every `HvLE` entry is checked before the parser sees it; a damaged tail is cut off and the valid prefix replayed. If nothing usable exists, the hive is scanned as it is on disk and the reason is logged.
 
-| Option | Description |
-|---|---|
-| `-d, --directory <DIR>` | Directory, mounted volume or extracted collection (repeatable) |
-| `-f, --file <FILE>` | Image, archive or single artifact (repeatable) |
-| `-o, --output <FILE>` | Output CSV (default `faramir.output.csv`) |
-| `--verbose` | Also print `INFO` diagnostics |
-| `--silent` | No console output |
-| `--source-evidence`, `--csv-output` | Legacy Boromir flags, still accepted |
-| `[ACTION]` | `all` (default), any `get-*` technique, `get-deleted-persistence`, `get-linux-persistence` |
+**Right hive, right root.** Each technique declares the registry root its paths belong to. A Run key is read from `NTUSER.DAT` as `SOFTWARE\Microsoft\...` and from the `SOFTWARE` hive as `Microsoft\...`, never the other way round. A hive of unknown kind is tried against every root.
 
----
+**Deleted cells.** When a key or value is deleted, Windows only flips the sign of its cell size. Faramir walks every hive bin with its own bounds-checked parser, puts deleted keys back on their path through the parent chain, and reports the ones under a persistence location, plus orphan values whose data looks like a command line.
 
-## How it is tested
+**Shadow copies.** Every snapshot of an NTFS partition goes through the same extraction as the live volume. A finding that exists only in a snapshot is reported once, with the snapshot's creation time.
 
-906 tests, all green on stable Rust:
-
-- a **synthetic regf and HvLE writer** builds hives and transaction logs with
-  real Marvin32 hashes, so every technique is exercised in the right hive and
-  in the wrong one;
-- a **real Windows 10 dirty hive** with its LOG1 and LOG2 is replayed and
-  compared with `rla.exe` output byte for byte;
-- a **synthetic Cortex XDR offline-collector package** with hives and logs in
-  separate `entry_` folders and two users with identical file names, run
-  through the real binary end to end;
-- collector layouts (KAPE, Velociraptor, image dumps, flattened names),
-  truncated and garbage logs, checksum-damaged hives, renamed hives, and the
-  full error-code catalogue;
-- **synthetic virtual disks**: fixed and dynamic VHD, dynamic VHDX, split and
-  descriptor-only VMDK, read back through the same path the NTFS extractor uses.
+## Testing
 
 ```bash
 cargo test
 ```
 
----
+906 tests. The suite builds its own hives and transaction logs (a small regf/HvLE writer with real Marvin32 hashes), replays a real Windows 10 dirty hive and compares the result with `rla.exe` byte for byte, cross-checks deleted-cell recovery with `RECmd --recover`, runs a synthetic Cortex XDR package through the binary end to end, and reads synthetic VHD, VHDX and VMDK images through the NTFS extractor.
 
 ## Credits
 
-- [Boromir](https://github.com/Alexgpsec/Persistence_Boromir) and the Faramir
-  Rust rewrite: [@Alexgpsec](https://github.com/Alexgpsec) (Alejandro Gamboa)
-- Boromir co-author, ingestion, Linux suite, timeline format and the hive
-  recovery engine: [@jupyterj0nes](https://github.com/jupyterj0nes)
-- Inspired by [Persistence Sniper](https://github.com/last-byte/PersistenceSniper),
-  [Masstin](https://github.com/jupyterj0nes/masstin) and
-  [Caarea](https://github.com/jupyterj0nes/caarea)
-- Dirty-hive test vector from [nt_hive2](https://codeberg.org/janstarke/nt_hive2),
-  the registry parser Faramir is built on
+- [Boromir](https://github.com/Alexgpsec/Persistence_Boromir) and the first Faramir Rust port: [@Alexgpsec](https://github.com/Alexgpsec) (Alejandro Gamboa)
+- Boromir co-author, evidence ingestion, Linux suite, timeline format, hive recovery and the readers ported from masstin: [@jupyterj0nes](https://github.com/jupyterj0nes)
+- Dirty-hive test vector from [nt_hive2](https://codeberg.org/janstarke/nt_hive2), the registry parser Faramir is built on
 
 ## License
 

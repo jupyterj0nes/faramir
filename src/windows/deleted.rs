@@ -415,7 +415,7 @@ pub fn findings_for_hive(info: &HiveInfo, scan: &DeletedScan) -> Vec<Persistence
         let ts = filetime_to_string(dk.key.timestamp_filetime);
         let strings: Vec<&RawValue> = dk.values.iter().filter(|v| v.data.as_deref().is_some_and(|d| !d.trim().is_empty())).collect();
         if strings.is_empty() {
-            println!("\t[deleted key] {}", dk.path);
+            out!("\t[deleted key] {}", dk.path);
             out.push(Persistence {
                 timestamp: ts,
                 technique: id.label().to_string(),
@@ -429,7 +429,7 @@ pub fn findings_for_hive(info: &HiveInfo, scan: &DeletedScan) -> Vec<Persistence
         }
         for v in strings {
             let data = v.data.clone().unwrap_or_default();
-            println!("\t[deleted key] {} \\ {} = {}", dk.path, v.name, data);
+            out!("\t[deleted key] {} \\ {} = {}", dk.path, v.name, data);
             out.push(Persistence {
                 timestamp: ts.clone(),
                 technique: id.label().to_string(),
@@ -446,7 +446,7 @@ pub fn findings_for_hive(info: &HiveInfo, scan: &DeletedScan) -> Vec<Persistence
         if !looks_executable(data) {
             continue;
         }
-        println!("\t[deleted value] {} = {}", v.name, data);
+        out!("\t[deleted value] {} = {}", v.name, data);
         out.push(Persistence {
             timestamp: String::new(),
             technique: TechniqueId::DeletedRegistry.label().to_string(),
@@ -468,7 +468,7 @@ pub fn scan_hive(info: &HiveInfo) -> Result<DeletedScan, FaramirError> {
 
 /// Scan every hive of the set, reusing the instances the techniques opened.
 pub fn scan_set(set: &mut HiveSet) -> Vec<Persistence> {
-    println!("+ Recovering deleted registry keys and values.");
+    out!("+ Recovering deleted registry keys and values.");
     let mut out = Vec::new();
     for idx in 0..set.len() {
         let Some(info) = set.info(idx).cloned() else { continue };
@@ -476,7 +476,7 @@ pub fn scan_set(set: &mut HiveSet) -> Vec<Persistence> {
         match std::panic::catch_unwind(move || HiveImage::new(bytes).map(|img| img.scan())) {
             Ok(Ok(scan)) => {
                 if !scan.deleted_keys.is_empty() || !scan.orphan_values.is_empty() {
-                    println!(
+                    out!(
                         "\t{}: {} deleted key(s), {} orphan value(s) in {} cell(s)",
                         info.path.display(),
                         scan.deleted_keys.len(),
