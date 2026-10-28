@@ -281,3 +281,20 @@ fn deleted_scan_survives_dirty_hive_with_logs() {
     let scan = scan_path(&hive).unwrap();
     assert_eq!(scan.orphan_values.len(), 1, "scan runs on the replayed state");
 }
+
+/// Dev utility: `cargo test --test test_deleted_cells dump_fixture -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn dump_fixture() {
+    let d = TempDir::new("del_dump");
+    for name in ["NewDirtyHive", "NewDirtyHive.LOG1", "NewDirtyHive.LOG2"] {
+        std::fs::copy(fixture(&format!("dirty_hive/{name}")), d.join(name)).unwrap();
+    }
+    let scan = scan_path(&d.join("NewDirtyHive")).unwrap();
+    for k in &scan.deleted_keys {
+        eprintln!("deleted key @{:#x} path={} parent={:#x} values={}", k.key.offset, k.path, k.key.parent, k.values.len());
+    }
+    for v in &scan.orphan_values {
+        eprintln!("orphan value @{:#x} {} = {:?}", v.offset, v.name, v.data);
+    }
+}
