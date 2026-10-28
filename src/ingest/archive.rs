@@ -58,7 +58,7 @@ pub fn is_relevant_artifact(entry_name: &str) -> bool {
     }
 
     // Windows Registry hives
-    let standard_hives = ["system", "software", "sam", "security", "ntuser.dat", "usrclass.dat", "amcache.hve"];
+    let standard_hives = ["system", "software", "sam", "security", "default", "ntuser.dat", "usrclass.dat", "amcache.hve"];
     if standard_hives.iter().any(|&h| file_name == h || file_name.ends_with(&format!("_{}", h)) || file_name.ends_with(&format!("-{}", h))) {
         return true;
     }
@@ -66,8 +66,20 @@ pub fn is_relevant_artifact(entry_name: &str) -> bool {
         return true;
     }
 
-    // DO NOT unpack .log1/.log2 to prevent nt_hive2 panics from incomplete triages
-    if file_name.ends_with(".log1") || file_name.ends_with(".log2") || file_name.ends_with(".log") || file_name.ends_with(".sav") {
+    // Registry transaction logs: REQUIRED to rebuild dirty hives. Every layout
+    // (SYSTEM.LOG1, bob_NTUSER.DAT.LOG1, C_Windows_System32_config_SOFTWARE.LOG2,
+    // legacy SYSTEM.LOG) is kept; validation happens later in windows::txlog.
+    if file_name.ends_with(".log1") || file_name.ends_with(".log2") {
+        return true;
+    }
+    if let Some(stem) = file_name.strip_suffix(".log") {
+        if standard_hives.iter().any(|&h| stem == h || stem.ends_with(&format!("_{}", h)) || stem.ends_with(&format!("-{}", h))) {
+            return true;
+        }
+    }
+
+    // Registry companions that are never parsed: TxR containers, setup backups
+    if file_name.ends_with(".blf") || file_name.ends_with(".regtrans-ms") || file_name.ends_with(".sav") {
         return false;
     }
 
@@ -126,6 +138,8 @@ pub fn is_relevant_artifact(entry_name: &str) -> bool {
         || file_name == "anacrontab"
         || file_name.ends_with("profile.ps1")
         || lower.contains("system32/tasks")
+        || lower.contains("/tasks/")
+        || lower.starts_with("tasks/")
         || lower.contains("cron.d/")
         || lower.contains("spool/cron/")
         || lower.contains("cron.hourly/")
@@ -221,17 +235,44 @@ pub fn unpack_archive_recursive(
         unpack_tar_gz(archive_path, &target_dir, silent)?;
     } else if path_str.ends_with(".tar") {
         unpack_tar(archive_path, &target_dir, silent)?;
+    } else {
+        return Err(format!(
+            "unsupported archive format (only zip, tar, tar.gz/tgz can be unpacked): {}",
+            archive_path.display()
+        )
+        .into());
     }
 
-    // Check for nested archives inside the newly extracted directory and unpack them
-    let nested_dirs = scan_and_unpack_nested(&target_dir, dest_base, silent)?;
-    let all_dirs = if nested_dirs.is_empty() {
-        vec![target_dir]
-    } else {
-        nested_dirs
-    };
-
+    // Nested archives (Cortex XDR `<module>-collection/script_output.zip`, Velociraptor
+    // `data.zip`, UAC tarballs inside a case zip, …) are unpacked IN PLACE, next to
+    // where they were found, so the whole package stays one evidence root: one host,
+    // one hive/transaction-log search space, no duplicate processing.
+    let nested_linux_roots = scan_and_unpack_nested(&target_dir, silent, 0)?;
+    let mut all_dirs = vec![target_dir];
+    all_dirs.extend(nested_linux_roots);
     Ok(all_dirs)
+}
+
+/// Maximum depth of archive-inside-archive nesting that is unpacked.
+pub const MAX_NESTED_ARCHIVE_DEPTH: usize = 4;
+
+/// Folder a nested archive is unpacked into (next to the archive itself).
+pub fn nested_extraction_dir(nested_archive: &Path) -> PathBuf {
+    let stem = nested_archive
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "nested".to_string());
+    let stem = stem
+        .strip_suffix(".tar.gz")
+        .or_else(|| stem.strip_suffix(".tgz"))
+        .or_else(|| stem.strip_suffix(".zip"))
+        .or_else(|| stem.strip_suffix(".tar"))
+        .unwrap_or(&stem)
+        .to_string();
+    nested_archive
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join(format!("{stem}_extracted"))
 }
 
 /// Unpacks relevant files from a ZIP archive, attempting known forensic passwords if encrypted
@@ -399,10 +440,15 @@ fn unpack_tar(tar_path: &Path, target_dir: &Path, _silent: bool) -> Result<(), B
     Ok(())
 }
 
-/// Scans for nested archives inside an extracted directory and unpacks them
-fn scan_and_unpack_nested(extracted_dir: &Path, dest_base: &Path, silent: bool) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+/// Unpacks every nested archive found under `extracted_dir` into a sibling
+/// `<name>_extracted/` folder and recurses into the result. Returns the nested
+/// roots that are Linux targets (they need their own pass, the Windows ones are
+/// covered by walking the outer root).
+fn scan_and_unpack_nested(extracted_dir: &Path, silent: bool, depth: usize) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    if depth >= MAX_NESTED_ARCHIVE_DEPTH {
+        return Ok(Vec::new());
+    }
     let mut nested_archives = Vec::new();
-
     for entry in walkdir::WalkDir::new(extracted_dir).into_iter().flatten() {
         let path = entry.path();
         if path.is_file() && is_supported_archive(path) {
@@ -410,13 +456,34 @@ fn scan_and_unpack_nested(extracted_dir: &Path, dest_base: &Path, silent: bool) 
         }
     }
 
-    let mut out_dirs = Vec::new();
+    let mut linux_roots = Vec::new();
     for nested in nested_archives {
-        log_message(silent, &format!("📦 Unpacking nested archive: {}", nested.display()));
-        if let Ok(dirs) = unpack_archive_recursive(&nested, dest_base, silent) {
-            out_dirs.extend(dirs);
+        let out_dir = nested_extraction_dir(&nested);
+        log_message(silent, &format!("📦 Unpacking nested archive: {} -> {}", nested.display(), out_dir.display()));
+        if let Err(e) = fs::create_dir_all(&out_dir) {
+            log_message(silent, &format!("⚠️ Warning: cannot create {}: {e}", out_dir.display()));
+            continue;
+        }
+        let lower = nested.to_string_lossy().to_lowercase();
+        let result = if lower.ends_with(".zip") {
+            unpack_zip(&nested, &out_dir, silent)
+        } else if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
+            unpack_tar_gz(&nested, &out_dir, silent)
+        } else if lower.ends_with(".tar") {
+            unpack_tar(&nested, &out_dir, silent)
+        } else {
+            Err(format!("unsupported nested archive format: {}", nested.display()).into())
+        };
+        if let Err(e) = result {
+            log_message(silent, &format!("⚠️ Warning: failed to unpack nested archive {}: {e}", nested.display()));
+            continue;
+        }
+        // The nested archive has been expanded; drop it so a later walk never re-unpacks it.
+        let _ = fs::remove_file(&nested);
+        linux_roots.extend(scan_and_unpack_nested(&out_dir, silent, depth + 1)?);
+        if crate::parsers::linux::is_linux_target(&out_dir) {
+            linux_roots.push(out_dir);
         }
     }
-
-    Ok(out_dirs)
+    Ok(linux_roots)
 }

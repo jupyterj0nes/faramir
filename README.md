@@ -132,6 +132,7 @@ faramir [OPTIONS] [ACTION]
 | `--file <FILE>` | `-f` | Individual evidence file (e.g. `.E01`, `.raw`, `.dd`, `.zip`, `.tar.gz`, hive) |
 | `--output <OUTPUT>` | `-o` | Output CSV file path |
 | `--silent` | | Suppress verbose logging |
+| `--verbose` | | Also print informational diagnostics (companion files skipped, logs matched outside the hive folder, hives rebuilt) |
 | `--source-evidence <DIR>` | | *(Legacy flag)* Path where evidence is mounted |
 | `--csv-output <DIR>` | | *(Legacy flag)* Output CSV prefix directory |
 
@@ -167,6 +168,52 @@ faramir -d /mnt/linux get-linux-persistence
 ```
 
 ---
+
+## Hive Handling & Diagnostics
+
+Faramir never drops a hive silently. Every degraded path is reported on stderr
+with a numbered code (`[ERR_WIN_TX_LOG_NOT_FOUND - 3028] ...`) and a severity
+(`ERROR` = artifact lost, `WARN` = processed in degraded mode, `INFO` = nothing
+lost). The full catalogue lives in `src/errors.rs`; the Windows registry range
+is `3001..3048`.
+
+### Hive classification
+
+A file is treated as a hive when its name looks like one **or** its header does.
+The kind (`SYSTEM`, `SOFTWARE`, `NTUSER.DAT`, `DEFAULT`, `UsrClass.dat`, …) is
+taken from the path embedded in the regf base block, so collector naming such as
+`bob_NTUSER.DAT`, `HOST-SOFTWARE`, `C_Windows_System32_config_SYSTEM`,
+`SOFTWARE.hve` or even `artifact_0017.bin` is handled. When neither source is
+conclusive the hive is scanned against every registry root so no detection is
+lost. Each technique declares the root its key paths are relative to
+(`HKLM\SOFTWARE`, `HKLM\SYSTEM`, `HKCU`, `HKCU\Software\Classes`) and only reads
+hives of that kind.
+
+### Dirty hives and transaction logs
+
+Hives collected live are usually *dirty* (primary ≠ secondary sequence number);
+the last writes only exist in `.LOG1`/`.LOG2`. Faramir:
+
+1. looks for the logs next to the hive (case-insensitive, any collector prefix),
+2. otherwise indexes every `.LOG1`/`.LOG2` under the evidence root and ranks
+   candidates by name and path similarity (parallel `files/` + `logs/` trees,
+   flattened Cortex XDR style names, image dumps),
+3. verifies each candidate against the hive through the embedded hive name, so
+   `NTUSER.DAT.LOG1` of another user is rejected (`ERR_WIN_TX_LOG_HIVE_MISMATCH`),
+4. validates every `HvLE` entry (sizes, page references, sequence chain) before
+   handing the log to the parser; a damaged tail is cut off and only the valid
+   prefix is replayed (`ERR_WIN_TX_LOG_PARTIAL`),
+5. replays LOG1 + LOG2 in sequence order and reports
+   `ERR_WIN_HIVE_RECOVERED`; if nothing usable exists the hive is still scanned
+   in its on-disk state (`ERR_WIN_HIVE_DIRTY`, `ERR_WIN_TX_LOG_NOT_FOUND`).
+
+Parser panics on corrupt data are caught per hive and per technique
+(`ERR_WIN_HIVE_PARSE_PANIC`, `ERR_WIN_TECH_PANIC`); the run always completes.
+
+### Toolchain
+
+`rust-toolchain.toml` pins the stable channel: the proc-macros of `binrw`
+(pulled in by `nt_hive2`) fail on recent nightlies.
 
 ## Output Format
 

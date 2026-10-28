@@ -1,6 +1,28 @@
 use std::fmt;
 use std::io;
 
+/// Severity attached to every [`FaramirError`].
+///
+/// * `Error`   – the artifact could not be processed at all.
+/// * `Warning` – processing continued in degraded mode (e.g. dirty hive without logs).
+/// * `Info`    – diagnostic only, nothing was lost (e.g. a companion file was skipped).
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Severity {
+    Error,
+    Warning,
+    Info,
+}
+
+impl Severity {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Error => "ERROR",
+            Self::Warning => "WARN",
+            Self::Info => "INFO",
+        }
+    }
+}
+
 /// Master error code enumeration for Faramir
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum FaramirError {
@@ -81,6 +103,66 @@ pub enum FaramirError {
     NetshFailed(String),
     /// PowerShell profile script error (3018)
     PowerShellProfileError(String),
+    /// Hive file does not start with the "regf" signature (3019)
+    HiveSignatureInvalid(String),
+    /// Hive file is shorter than a base block (3020)
+    HiveHeaderTruncated(String),
+    /// Hive base block XOR-32 checksum mismatch (3021)
+    HiveChecksumInvalid(String),
+    /// Hive kind cannot be resolved from file name nor header (3022)
+    HiveKindUnresolved(String),
+    /// File name suggests one hive kind, header another; header wins (3023)
+    HiveNameHeaderMismatch(String),
+    /// nt_hive2 panicked while parsing a hive (3024)
+    HiveParsePanic(String),
+    /// Registry companion file (.blf/.regtrans-ms/.LOG*/.TMP/.SAV) ignored as non-hive (3025)
+    HiveCompanionSkipped(String),
+    /// Same hive path discovered twice (3026)
+    HiveDuplicateSkipped(String),
+    /// Header says this file is a transaction log, not a primary hive (3027)
+    HiveNotPrimaryFile(String),
+    /// Dirty hive, but no .LOG1/.LOG2 located under the evidence root (3028)
+    TxLogNotFound(String),
+    /// Transaction log located but could not be opened or read (3029)
+    TxLogOpenFailed(String),
+    /// Transaction log lacks the "regf" signature (3030)
+    TxLogSignatureInvalid(String),
+    /// Transaction log uses the legacy (file type 1/2) format that cannot be replayed (3031)
+    TxLogLegacyFormat(String),
+    /// Transaction log truncated: an entry claims more bytes than the file has (3032)
+    TxLogTruncated(String),
+    /// Transaction log entry is structurally invalid (3033)
+    TxLogEntryInvalid(String),
+    /// Transaction log contains no HvLE entries (3034)
+    TxLogNoEntries(String),
+    /// Transaction log entries do not continue the hive's sequence number (3035)
+    TxLogSequenceMismatch(String),
+    /// Transaction log base block belongs to a different hive (3036)
+    TxLogHiveMismatch(String),
+    /// nt_hive2 rejected the transaction log while attaching it (3037)
+    TxLogApplyFailed(String),
+    /// nt_hive2 panicked while parsing or applying the transaction log (3038)
+    TxLogApplyPanic(String),
+    /// Several transaction log candidates scored equally (3039)
+    TxLogAmbiguous(String),
+    /// Only a prefix of the transaction log entries could be used (3040)
+    TxLogPartiallyApplied(String),
+    /// SYSTEM hive has no ControlSetNNN key (3041)
+    ControlSetNotFound(String),
+    /// Technique found no hive of the required kind (3042)
+    TechniqueNoApplicableHive(String),
+    /// Technique panicked on a hive and that hive was skipped (3043)
+    TechniquePanicked(String),
+    /// Filesystem walk error during hive discovery (3044)
+    HiveDiscoveryIoError(String),
+    /// Registry value present but empty (3045)
+    ValueEmpty(String),
+    /// Hive file is zero bytes (3046)
+    HiveEmptyFile(String),
+    /// Transaction log was found far from its hive; applied after header verification (3047)
+    TxLogRemoteMatch(String),
+    /// Dirty hive was rebuilt from transaction logs (3048)
+    HiveRecovered(String),
 
     // ─── 4000..4999: Linux Persistence ──────────────────────────────────────
     /// Invalid cron syntax (4001)
@@ -187,6 +269,36 @@ impl FaramirError {
             Self::TimeProvidersFailed(_) => "ERR_WIN_TIME_PROVIDER_FAIL",
             Self::NetshFailed(_) => "ERR_WIN_NETSH_FAIL",
             Self::PowerShellProfileError(_) => "ERR_WIN_POWERSHELL_PROFILE_FAIL",
+            Self::HiveSignatureInvalid(_) => "ERR_WIN_HIVE_SIGNATURE",
+            Self::HiveHeaderTruncated(_) => "ERR_WIN_HIVE_TRUNCATED",
+            Self::HiveChecksumInvalid(_) => "ERR_WIN_HIVE_CHECKSUM",
+            Self::HiveKindUnresolved(_) => "ERR_WIN_HIVE_KIND_UNRESOLVED",
+            Self::HiveNameHeaderMismatch(_) => "ERR_WIN_HIVE_NAME_HEADER_MISMATCH",
+            Self::HiveParsePanic(_) => "ERR_WIN_HIVE_PARSE_PANIC",
+            Self::HiveCompanionSkipped(_) => "ERR_WIN_HIVE_COMPANION_SKIPPED",
+            Self::HiveDuplicateSkipped(_) => "ERR_WIN_HIVE_DUPLICATE",
+            Self::HiveNotPrimaryFile(_) => "ERR_WIN_HIVE_NOT_PRIMARY",
+            Self::TxLogNotFound(_) => "ERR_WIN_TX_LOG_NOT_FOUND",
+            Self::TxLogOpenFailed(_) => "ERR_WIN_TX_LOG_OPEN",
+            Self::TxLogSignatureInvalid(_) => "ERR_WIN_TX_LOG_SIGNATURE",
+            Self::TxLogLegacyFormat(_) => "ERR_WIN_TX_LOG_LEGACY",
+            Self::TxLogTruncated(_) => "ERR_WIN_TX_LOG_TRUNCATED",
+            Self::TxLogEntryInvalid(_) => "ERR_WIN_TX_LOG_ENTRY_INVALID",
+            Self::TxLogNoEntries(_) => "ERR_WIN_TX_LOG_EMPTY",
+            Self::TxLogSequenceMismatch(_) => "ERR_WIN_TX_LOG_SEQUENCE",
+            Self::TxLogHiveMismatch(_) => "ERR_WIN_TX_LOG_HIVE_MISMATCH",
+            Self::TxLogApplyFailed(_) => "ERR_WIN_TX_LOG_APPLY",
+            Self::TxLogApplyPanic(_) => "ERR_WIN_TX_LOG_APPLY_PANIC",
+            Self::TxLogAmbiguous(_) => "ERR_WIN_TX_LOG_AMBIGUOUS",
+            Self::TxLogPartiallyApplied(_) => "ERR_WIN_TX_LOG_PARTIAL",
+            Self::ControlSetNotFound(_) => "ERR_WIN_CONTROL_SET_MISSING",
+            Self::TechniqueNoApplicableHive(_) => "ERR_WIN_TECH_NO_HIVE",
+            Self::TechniquePanicked(_) => "ERR_WIN_TECH_PANIC",
+            Self::HiveDiscoveryIoError(_) => "ERR_WIN_HIVE_DISCOVERY_IO",
+            Self::ValueEmpty(_) => "ERR_WIN_VALUE_EMPTY",
+            Self::HiveEmptyFile(_) => "ERR_WIN_HIVE_EMPTY",
+            Self::TxLogRemoteMatch(_) => "ERR_WIN_TX_LOG_REMOTE_MATCH",
+            Self::HiveRecovered(_) => "ERR_WIN_HIVE_RECOVERED",
 
             Self::CronSyntax(_) => "ERR_LNX_CRON_SYNTAX",
             Self::CronNoUser(_) => "ERR_LNX_CRON_NO_USER",
@@ -262,6 +374,36 @@ impl FaramirError {
             Self::TimeProvidersFailed(_) => 3016,
             Self::NetshFailed(_) => 3017,
             Self::PowerShellProfileError(_) => 3018,
+            Self::HiveSignatureInvalid(_) => 3019,
+            Self::HiveHeaderTruncated(_) => 3020,
+            Self::HiveChecksumInvalid(_) => 3021,
+            Self::HiveKindUnresolved(_) => 3022,
+            Self::HiveNameHeaderMismatch(_) => 3023,
+            Self::HiveParsePanic(_) => 3024,
+            Self::HiveCompanionSkipped(_) => 3025,
+            Self::HiveDuplicateSkipped(_) => 3026,
+            Self::HiveNotPrimaryFile(_) => 3027,
+            Self::TxLogNotFound(_) => 3028,
+            Self::TxLogOpenFailed(_) => 3029,
+            Self::TxLogSignatureInvalid(_) => 3030,
+            Self::TxLogLegacyFormat(_) => 3031,
+            Self::TxLogTruncated(_) => 3032,
+            Self::TxLogEntryInvalid(_) => 3033,
+            Self::TxLogNoEntries(_) => 3034,
+            Self::TxLogSequenceMismatch(_) => 3035,
+            Self::TxLogHiveMismatch(_) => 3036,
+            Self::TxLogApplyFailed(_) => 3037,
+            Self::TxLogApplyPanic(_) => 3038,
+            Self::TxLogAmbiguous(_) => 3039,
+            Self::TxLogPartiallyApplied(_) => 3040,
+            Self::ControlSetNotFound(_) => 3041,
+            Self::TechniqueNoApplicableHive(_) => 3042,
+            Self::TechniquePanicked(_) => 3043,
+            Self::HiveDiscoveryIoError(_) => 3044,
+            Self::ValueEmpty(_) => 3045,
+            Self::HiveEmptyFile(_) => 3046,
+            Self::TxLogRemoteMatch(_) => 3047,
+            Self::HiveRecovered(_) => 3048,
 
             Self::CronSyntax(_) => 4001,
             Self::CronNoUser(_) => 4002,
@@ -294,6 +436,255 @@ impl FaramirError {
             Self::CliInvalidAction(_) => 6002,
             Self::CliPathNotFound(_) => 6003,
         }
+    }
+
+    /// Severity of the condition. Everything is an `Error` unless listed here.
+    pub fn severity(&self) -> Severity {
+        match self {
+            Self::HiveDirtyNoLogs(_)
+            | Self::TxLogReplayFailed(_)
+            | Self::HiveChecksumInvalid(_)
+            | Self::HiveKindUnresolved(_)
+            | Self::HiveNameHeaderMismatch(_)
+            | Self::TxLogNotFound(_)
+            | Self::TxLogLegacyFormat(_)
+            | Self::TxLogTruncated(_)
+            | Self::TxLogEntryInvalid(_)
+            | Self::TxLogNoEntries(_)
+            | Self::TxLogSequenceMismatch(_)
+            | Self::TxLogApplyFailed(_)
+            | Self::TxLogApplyPanic(_)
+            | Self::TxLogAmbiguous(_)
+            | Self::TxLogPartiallyApplied(_)
+            | Self::ControlSetNotFound(_)
+            | Self::TechniquePanicked(_)
+            | Self::HiveDiscoveryIoError(_)
+            | Self::ValueEmpty(_) => Severity::Warning,
+
+            Self::HiveCompanionSkipped(_)
+            | Self::HiveDuplicateSkipped(_)
+            | Self::TxLogHiveMismatch(_)
+            | Self::TechniqueNoApplicableHive(_)
+            | Self::TxLogRemoteMatch(_)
+            | Self::HiveRecovered(_) => Severity::Info,
+
+            _ => Severity::Error,
+        }
+    }
+
+    /// Subsystem derived from the numeric range.
+    pub fn category(&self) -> &'static str {
+        match self.error_number() / 1000 {
+            1 => "SYS",
+            2 => "ING",
+            3 => "WIN",
+            4 => "LNX",
+            5 => "OUT",
+            6 => "CLI",
+            _ => "UNK",
+        }
+    }
+
+    /// The free-text detail attached to the error.
+    pub fn detail(&self) -> &str {
+        match self {
+            Self::IoError(s)
+            | Self::NotFound(s)
+            | Self::PermissionDenied(s)
+            | Self::EmptyFile(s)
+            | Self::ImageOpenFailed(s)
+            | Self::EwfInitFailed(s)
+            | Self::NoNtfsPartition(s)
+            | Self::BitLockerEncrypted(s)
+            | Self::NtfsParseError(s)
+            | Self::NtfsUpcaseError(s)
+            | Self::NtfsRootDirError(s)
+            | Self::NtfsPathNotFound(s)
+            | Self::NtfsDataStreamError(s)
+            | Self::ArchiveOpenFailed(s)
+            | Self::ArchiveCorrupt(s)
+            | Self::ArchiveUnpackError(s)
+            | Self::StagingDirFailed(s)
+            | Self::VssParseError(s)
+            | Self::HiveOpenFailed(s)
+            | Self::HiveCorrupt(s)
+            | Self::HiveDirtyNoLogs(s)
+            | Self::TxLogReplayFailed(s)
+            | Self::HiveRootKeyFailed(s)
+            | Self::KeyNotFound(s)
+            | Self::SubkeysEnumFailed(s)
+            | Self::ValueNotFound(s)
+            | Self::ValueTypeMismatch(s)
+            | Self::CurrentControlSetFailed(s)
+            | Self::TaskXmlParseError(s)
+            | Self::TaskXmlMissingExec(s)
+            | Self::TerminalJsonParseError(s)
+            | Self::StartupDirReadError(s)
+            | Self::PrintMonitorsFailed(s)
+            | Self::TimeProvidersFailed(s)
+            | Self::NetshFailed(s)
+            | Self::PowerShellProfileError(s)
+            | Self::HiveSignatureInvalid(s)
+            | Self::HiveHeaderTruncated(s)
+            | Self::HiveChecksumInvalid(s)
+            | Self::HiveKindUnresolved(s)
+            | Self::HiveNameHeaderMismatch(s)
+            | Self::HiveParsePanic(s)
+            | Self::HiveCompanionSkipped(s)
+            | Self::HiveDuplicateSkipped(s)
+            | Self::HiveNotPrimaryFile(s)
+            | Self::TxLogNotFound(s)
+            | Self::TxLogOpenFailed(s)
+            | Self::TxLogSignatureInvalid(s)
+            | Self::TxLogLegacyFormat(s)
+            | Self::TxLogTruncated(s)
+            | Self::TxLogEntryInvalid(s)
+            | Self::TxLogNoEntries(s)
+            | Self::TxLogSequenceMismatch(s)
+            | Self::TxLogHiveMismatch(s)
+            | Self::TxLogApplyFailed(s)
+            | Self::TxLogApplyPanic(s)
+            | Self::TxLogAmbiguous(s)
+            | Self::TxLogPartiallyApplied(s)
+            | Self::ControlSetNotFound(s)
+            | Self::TechniqueNoApplicableHive(s)
+            | Self::TechniquePanicked(s)
+            | Self::HiveDiscoveryIoError(s)
+            | Self::ValueEmpty(s)
+            | Self::HiveEmptyFile(s)
+            | Self::TxLogRemoteMatch(s)
+            | Self::HiveRecovered(s)
+            | Self::CronSyntax(s)
+            | Self::CronNoUser(s)
+            | Self::CronNoCommand(s)
+            | Self::AnacronSyntax(s)
+            | Self::SystemdNoSection(s)
+            | Self::SystemdNoExec(s)
+            | Self::SystemdSyntax(s)
+            | Self::SystemdGeneratorError(s)
+            | Self::ShellProfileSyntax(s)
+            | Self::LdPreloadInvalid(s)
+            | Self::LdPreloadEmpty(s)
+            | Self::SshKeyInvalid(s)
+            | Self::SshConfigSyntax(s)
+            | Self::SudoersSyntax(s)
+            | Self::PamSyntax(s)
+            | Self::UdevSyntax(s)
+            | Self::KernelModuleSyntax(s)
+            | Self::PackageHookSyntax(s)
+            | Self::XdgNoExec(s)
+            | Self::XdgSyntax(s)
+            | Self::ProcParseError(s)
+            | Self::OutFileCreateFailed(s)
+            | Self::OutCsvWriteError(s)
+            | Self::OutCsvFlushFailed(s)
+            | Self::OutDirCreateFailed(s)
+            | Self::CliNoTarget(s)
+            | Self::CliInvalidAction(s)
+            | Self::CliPathNotFound(s) => s,
+        }
+    }
+
+    /// One instance of every variant (with an empty detail). Used by tests to
+    /// prove that codes and numbers are unique and that every variant is wired.
+    pub fn catalog() -> Vec<FaramirError> {
+        let e = String::new;
+        vec![
+            Self::IoError(e()),
+            Self::NotFound(e()),
+            Self::PermissionDenied(e()),
+            Self::EmptyFile(e()),
+            Self::ImageOpenFailed(e()),
+            Self::EwfInitFailed(e()),
+            Self::NoNtfsPartition(e()),
+            Self::BitLockerEncrypted(e()),
+            Self::NtfsParseError(e()),
+            Self::NtfsUpcaseError(e()),
+            Self::NtfsRootDirError(e()),
+            Self::NtfsPathNotFound(e()),
+            Self::NtfsDataStreamError(e()),
+            Self::ArchiveOpenFailed(e()),
+            Self::ArchiveCorrupt(e()),
+            Self::ArchiveUnpackError(e()),
+            Self::StagingDirFailed(e()),
+            Self::VssParseError(e()),
+            Self::HiveOpenFailed(e()),
+            Self::HiveCorrupt(e()),
+            Self::HiveDirtyNoLogs(e()),
+            Self::TxLogReplayFailed(e()),
+            Self::HiveRootKeyFailed(e()),
+            Self::KeyNotFound(e()),
+            Self::SubkeysEnumFailed(e()),
+            Self::ValueNotFound(e()),
+            Self::ValueTypeMismatch(e()),
+            Self::CurrentControlSetFailed(e()),
+            Self::TaskXmlParseError(e()),
+            Self::TaskXmlMissingExec(e()),
+            Self::TerminalJsonParseError(e()),
+            Self::StartupDirReadError(e()),
+            Self::PrintMonitorsFailed(e()),
+            Self::TimeProvidersFailed(e()),
+            Self::NetshFailed(e()),
+            Self::PowerShellProfileError(e()),
+            Self::HiveSignatureInvalid(e()),
+            Self::HiveHeaderTruncated(e()),
+            Self::HiveChecksumInvalid(e()),
+            Self::HiveKindUnresolved(e()),
+            Self::HiveNameHeaderMismatch(e()),
+            Self::HiveParsePanic(e()),
+            Self::HiveCompanionSkipped(e()),
+            Self::HiveDuplicateSkipped(e()),
+            Self::HiveNotPrimaryFile(e()),
+            Self::TxLogNotFound(e()),
+            Self::TxLogOpenFailed(e()),
+            Self::TxLogSignatureInvalid(e()),
+            Self::TxLogLegacyFormat(e()),
+            Self::TxLogTruncated(e()),
+            Self::TxLogEntryInvalid(e()),
+            Self::TxLogNoEntries(e()),
+            Self::TxLogSequenceMismatch(e()),
+            Self::TxLogHiveMismatch(e()),
+            Self::TxLogApplyFailed(e()),
+            Self::TxLogApplyPanic(e()),
+            Self::TxLogAmbiguous(e()),
+            Self::TxLogPartiallyApplied(e()),
+            Self::ControlSetNotFound(e()),
+            Self::TechniqueNoApplicableHive(e()),
+            Self::TechniquePanicked(e()),
+            Self::HiveDiscoveryIoError(e()),
+            Self::ValueEmpty(e()),
+            Self::HiveEmptyFile(e()),
+            Self::TxLogRemoteMatch(e()),
+            Self::HiveRecovered(e()),
+            Self::CronSyntax(e()),
+            Self::CronNoUser(e()),
+            Self::CronNoCommand(e()),
+            Self::AnacronSyntax(e()),
+            Self::SystemdNoSection(e()),
+            Self::SystemdNoExec(e()),
+            Self::SystemdSyntax(e()),
+            Self::SystemdGeneratorError(e()),
+            Self::ShellProfileSyntax(e()),
+            Self::LdPreloadInvalid(e()),
+            Self::LdPreloadEmpty(e()),
+            Self::SshKeyInvalid(e()),
+            Self::SshConfigSyntax(e()),
+            Self::SudoersSyntax(e()),
+            Self::PamSyntax(e()),
+            Self::UdevSyntax(e()),
+            Self::KernelModuleSyntax(e()),
+            Self::PackageHookSyntax(e()),
+            Self::XdgNoExec(e()),
+            Self::XdgSyntax(e()),
+            Self::ProcParseError(e()),
+            Self::OutFileCreateFailed(e()),
+            Self::OutCsvWriteError(e()),
+            Self::OutCsvFlushFailed(e()),
+            Self::OutDirCreateFailed(e()),
+            Self::CliNoTarget(e()),
+            Self::CliInvalidAction(e()),
+            Self::CliPathNotFound(e()),
+        ]
     }
 }
 
@@ -339,6 +730,36 @@ impl fmt::Display for FaramirError {
             Self::TimeProvidersFailed(e) => write!(f, "Time providers error: {}", e),
             Self::NetshFailed(e) => write!(f, "Netsh helper error: {}", e),
             Self::PowerShellProfileError(e) => write!(f, "PowerShell profile error: {}", e),
+            Self::HiveSignatureInvalid(p) => write!(f, "File lacks the 'regf' hive signature: {}", p),
+            Self::HiveHeaderTruncated(p) => write!(f, "Hive shorter than its 4096-byte base block: {}", p),
+            Self::HiveChecksumInvalid(p) => write!(f, "Hive base block checksum mismatch: {}", p),
+            Self::HiveKindUnresolved(p) => write!(f, "Cannot tell which hive this is (name and header inconclusive), trying every root: {}", p),
+            Self::HiveNameHeaderMismatch(p) => write!(f, "File name and embedded header disagree on hive kind, header wins: {}", p),
+            Self::HiveParsePanic(p) => write!(f, "Hive parser panicked, hive skipped: {}", p),
+            Self::HiveCompanionSkipped(p) => write!(f, "Registry companion file ignored (not a primary hive): {}", p),
+            Self::HiveDuplicateSkipped(p) => write!(f, "Hive already queued, duplicate skipped: {}", p),
+            Self::HiveNotPrimaryFile(p) => write!(f, "File is a transaction log, not a primary hive: {}", p),
+            Self::TxLogNotFound(p) => write!(f, "Dirty hive but no .LOG1/.LOG2 could be located for: {}", p),
+            Self::TxLogOpenFailed(p) => write!(f, "Transaction log cannot be opened: {}", p),
+            Self::TxLogSignatureInvalid(p) => write!(f, "Transaction log lacks the 'regf' signature: {}", p),
+            Self::TxLogLegacyFormat(p) => write!(f, "Transaction log is in legacy (pre-8.1) format and cannot be replayed: {}", p),
+            Self::TxLogTruncated(p) => write!(f, "Transaction log truncated: {}", p),
+            Self::TxLogEntryInvalid(p) => write!(f, "Transaction log entry invalid: {}", p),
+            Self::TxLogNoEntries(p) => write!(f, "Transaction log has no HvLE entries: {}", p),
+            Self::TxLogSequenceMismatch(p) => write!(f, "Transaction log sequence does not follow the hive: {}", p),
+            Self::TxLogHiveMismatch(p) => write!(f, "Transaction log belongs to a different hive: {}", p),
+            Self::TxLogApplyFailed(p) => write!(f, "Transaction log rejected by parser: {}", p),
+            Self::TxLogApplyPanic(p) => write!(f, "Transaction log parser panicked: {}", p),
+            Self::TxLogAmbiguous(p) => write!(f, "Several transaction log candidates match equally well: {}", p),
+            Self::TxLogPartiallyApplied(p) => write!(f, "Only a prefix of the transaction log was usable: {}", p),
+            Self::ControlSetNotFound(p) => write!(f, "No ControlSetNNN key in SYSTEM hive: {}", p),
+            Self::TechniqueNoApplicableHive(p) => write!(f, "No hive of the required kind for technique: {}", p),
+            Self::TechniquePanicked(p) => write!(f, "Technique panicked on hive and was skipped: {}", p),
+            Self::HiveDiscoveryIoError(p) => write!(f, "Filesystem error while discovering hives: {}", p),
+            Self::ValueEmpty(p) => write!(f, "Registry value is empty: {}", p),
+            Self::HiveEmptyFile(p) => write!(f, "Hive file is zero bytes: {}", p),
+            Self::TxLogRemoteMatch(p) => write!(f, "Transaction log found outside the hive folder, matched by header: {}", p),
+            Self::HiveRecovered(p) => write!(f, "Dirty hive rebuilt from transaction logs: {}", p),
 
             Self::CronSyntax(e) => write!(f, "Cron syntax error: {}", e),
             Self::CronNoUser(e) => write!(f, "Cron missing user: {}", e),

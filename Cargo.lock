@@ -590,6 +590,7 @@ dependencies = [
  "ewf 0.4.10",
  "flate2",
  "indicatif",
+ "marvin32",
  "mbrman",
  "nt_hive2",
  "ntfs",
