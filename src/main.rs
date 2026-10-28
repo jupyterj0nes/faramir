@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{Parser, ValueEnum};
 
 use faramir::windows::{self, diag, HiveSet, TechniqueId};
-use faramir::{csv_out, event, ingest, parsers};
+use faramir::{carve, csv_out, event, ingest, parsers};
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
@@ -129,6 +129,13 @@ struct Args {
     #[arg(long = "verbose")]
     verbose: bool,
 
+    /// Also carve registry hives out of the raw bytes of every disk image, and
+    /// of plain files given with -f that are not hives (pagefile, memory dump,
+    /// unallocated-space dump). Reads the whole image; off by default. Every
+    /// finding it produces is tagged "carved".
+    #[arg(long = "carve")]
+    carve: bool,
+
     /// Action to perform
     #[arg(default_value = "all")]
     action: Action,
@@ -141,13 +148,15 @@ fn run_windows(set: &mut HiveSet, action: &Action, source: &Path) -> Vec<windows
     }
 }
 
+/// Analyse one evidence directory. Returns the Windows findings so a carving
+/// pass over the same image can fold what the live registry already shows.
 fn process_target_directory(
     path: &Path,
     action: &Action,
     silent: bool,
     all_events: &mut Vec<event::Event>,
     hostname_override: Option<&str>,
-) {
+) -> Vec<windows::Persistence> {
     let raw_name = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -170,6 +179,48 @@ fn process_target_directory(
         raw_name
     };
 
+    // 0. Linux volumes staged out of a disk image: each one is its own host
+    let linux_volumes: Vec<PathBuf> = std::fs::read_dir(path)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.path())
+                .filter(|p| p.is_dir() && p.file_name().map(|n| ingest::linux_image::is_linux_volume_dir(&n.to_string_lossy())).unwrap_or(false))
+                .collect()
+        })
+        .unwrap_or_default();
+    if !linux_volumes.is_empty() {
+        if *action == Action::All || *action == Action::GetLinuxPersistence {
+            for vol in &linux_volumes {
+                let host = std::fs::read_to_string(vol.join("etc").join("hostname"))
+                    .ok()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| hostname.clone());
+                if !silent {
+                    println!("🐧 Detected Linux volume [{}]: {}", host, vol.display());
+                }
+                all_events.extend(parsers::linux::process_linux_target(vol, &host));
+            }
+        }
+        if *action == Action::GetLinuxPersistence {
+            return Vec::new();
+        }
+        // Windows volumes of the same image, if any, are handled below;
+        // the generic Linux detection must not re-read the volumes just done.
+        let mut set = HiveSet::discover(path);
+        if set.is_empty() {
+            return Vec::new();
+        }
+        if !silent {
+            println!("🪟 Detected Windows target [{}]: {} ({} hive(s))", hostname, path.display(), set.len());
+        }
+        let persistences = windows::fold_vss_findings(run_windows(&mut set, action, path));
+        for p in &persistences {
+            all_events.push(windows::persistence_to_event(p, &hostname));
+        }
+        return persistences;
+    }
+
     // 1. Linux system / triage
     if parsers::linux::is_linux_target(path) {
         if *action == Action::All || *action == Action::GetLinuxPersistence {
@@ -179,14 +230,14 @@ fn process_target_directory(
             let linux_events = parsers::linux::process_linux_target(path, &hostname);
             all_events.extend(linux_events);
         }
-        return;
+        return Vec::new();
     }
 
     // 2. Windows artifacts
     if *action != Action::GetLinuxPersistence {
         let mut set = HiveSet::discover(path);
         if set.is_empty() && !path.join("Windows").exists() && !path.join("windows").exists() {
-            return;
+            return Vec::new();
         }
         if !silent {
             println!("🪟 Detected Windows target [{}]: {} ({} hive(s))", hostname, path.display(), set.len());
@@ -199,6 +250,55 @@ fn process_target_directory(
         for p in &persistences {
             all_events.push(windows::persistence_to_event(p, &hostname));
         }
+        return persistences;
+    }
+    Vec::new()
+}
+
+#[allow(clippy::too_many_arguments)]
+/// `--carve`: scan the raw bytes of `source` (image or plain file) for hives,
+/// run the techniques on what comes out and add the findings tagged `carved`.
+/// `extracted` is the staging folder of the same image, so copies identical
+/// to the hives already analysed are skipped; `live` are that run's findings.
+fn carve_and_process(
+    source: &Path,
+    staging: &Path,
+    extracted: Option<&Path>,
+    live: &[windows::Persistence],
+    hostname: &str,
+    action: &Action,
+    silent: bool,
+    all_events: &mut Vec<event::Event>,
+) {
+    if *action == Action::GetLinuxPersistence {
+        return;
+    }
+    if !silent {
+        println!("🔪 Carving registry hives from raw bytes of {}", source.display());
+    }
+    let known = extracted.map(carve::fingerprints_under).unwrap_or_default();
+    let carved_dir = staging.join("carved");
+    let report = carve::carve_path(source, &carved_dir, &known);
+    if !silent {
+        println!("  └─ {}", carve::summary_line(&report));
+    }
+    if report.hives.is_empty() {
+        return;
+    }
+    let mut set = HiveSet::from_paths(&report.hive_paths(), &carved_dir);
+    if set.is_empty() {
+        return;
+    }
+    let findings = run_windows(&mut set, action, &carved_dir);
+    let (tagged, fold) = carve::tag_and_fold(live, findings, &report.hives);
+    if !silent {
+        println!(
+            "🔪 {} carved persistence item(s) kept ({} already present live, {} repeated across carved hives)",
+            fold.kept, fold.folded_into_live, fold.folded_into_carved
+        );
+    }
+    for p in &tagged {
+        all_events.push(windows::persistence_to_event(p, hostname));
     }
 }
 
@@ -270,11 +370,19 @@ fn main() -> Result<()> {
             if !args.silent {
                 println!("  [{}/{}] Extracting image: {}", idx + 1, images.len(), img.file_name().unwrap_or_default().to_string_lossy());
             }
-            match ingest::image::unpack_disk_image(img, &staging, args.silent) {
-                Ok(extracted) => process_target_directory(&extracted, &args.action, args.silent, &mut all_events, None),
+            let (extracted, live) = match ingest::image::unpack_disk_image(img, &staging, args.silent) {
+                Ok(extracted) => {
+                    let live = process_target_directory(&extracted, &args.action, args.silent, &mut all_events, None);
+                    (Some(extracted), live)
+                }
                 Err(e) => {
                     diag::record(faramir::errors::FaramirError::ImageOpenFailed(format!("{}: {e}", img.display())));
+                    (None, Vec::new())
                 }
+            };
+            if args.carve {
+                let hostname = img.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Unknown".to_string());
+                carve_and_process(img, &staging, extracted.as_deref(), &live, &hostname, &args.action, args.silent, &mut all_events);
             }
             let _ = std::fs::remove_dir_all(&staging);
         }
@@ -317,13 +425,22 @@ fn main() -> Result<()> {
     }
 
     // 4. Direct individual files
-    for file in direct_files {
+    let mut carved_any_file = false;
+    for (idx, file) in direct_files.iter().enumerate() {
         let path = file.as_path();
         let hostname = "SingleFile";
         let fname = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
         if fname.ends_with(".service") || fname.contains("cron") || fname.contains("profile") {
             let linux_events = parsers::linux::process_linux_target(path, hostname);
             all_events.extend(linux_events);
+        } else if args.carve && !faramir::carve::hive::starts_with_regf(path) {
+            // not a hive: treat it as a blob to carve (pagefile, memory dump, slack dump)
+            carved_any_file = true;
+            let staging = std::env::temp_dir().join(format!("faramir_carve_{}_{}", std::process::id(), idx));
+            let _ = std::fs::create_dir_all(&staging);
+            let host = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| hostname.to_string());
+            carve_and_process(path, &staging, None, &[], &host, &args.action, args.silent, &mut all_events);
+            let _ = std::fs::remove_dir_all(&staging);
         } else {
             let parent = path.parent().unwrap_or(path).to_path_buf();
             let mut set = HiveSet::from_paths(&[path.to_path_buf()], &parent);
@@ -335,6 +452,11 @@ fn main() -> Result<()> {
                 all_events.push(windows::persistence_to_event(p, hostname));
             }
         }
+    }
+    if args.carve && images.is_empty() && !carved_any_file {
+        diag::record(faramir::errors::FaramirError::CarveNoTarget(
+            "carving reads disk images (-f image.E01/.vmdk/.vhdx/.raw) or plain files given with -f; directories and triage archives are not carved".into(),
+        ));
     }
 
     all_events.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));

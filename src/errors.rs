@@ -73,6 +73,44 @@ pub enum FaramirError {
     ImageSegmentSkipped(String),
     /// Image is incomplete: descriptor without data file, truncated stream, missing parent (2018)
     ImageIncomplete(String),
+    /// Carving: the image or file could not be opened for a raw scan (2019)
+    CarveOpenFailed(String),
+    /// Carving: a block could not be read; the scan skipped past it (2020)
+    CarveReadError(String),
+    /// Carving: a read stalled past the time budget; the reader was reopened and the window skipped (2021)
+    CarveReadStalled(String),
+    /// Carving: a `regf` signature whose base block failed validation (2022)
+    CarveHeaderRejected(String),
+    /// Carving: the hive bin chain broke before the declared size; the valid prefix was kept (2023)
+    CarveHiveTruncated(String),
+    /// Carving: valid base block but no usable bins / root cell; nothing carved (2024)
+    CarveHiveRejected(String),
+    /// Carving: identical to a hive already carved from this image (2025)
+    CarveDuplicate(String),
+    /// Carving: identical to a hive extracted from the file system or a shadow copy (2026)
+    CarveMatchesExtracted(String),
+    /// Carving: the carved hive could not be written to the staging folder (2027)
+    CarveWriteFailed(String),
+    /// Carving: `--carve` was given but nothing carvable was provided (2028)
+    CarveNoTarget(String),
+    /// Carving: a hive was recovered from raw bytes (2029)
+    CarveHiveRecovered(String),
+    /// Carving: the scan was abandoned (too many consecutive failures, empty source) (2030)
+    CarveAborted(String),
+    /// Linux file system (ext2/3/4) could not be opened (2031)
+    ExtParseError(String),
+    /// LVM physical volume could not be parsed (2032)
+    LvmParseError(String),
+    /// LVM logical volume uses a layout that is not read (striped, mirrored, thin, RAID, multi-PV) (2033)
+    LvmUnsupportedLayout(String),
+    /// A Linux volume of a kind that is not read yet (XFS, btrfs, F2FS, swap) (2034)
+    LinuxFsUnsupported(String),
+    /// LUKS-encrypted volume; nothing can be read without the key (2035)
+    LuksEncrypted(String),
+    /// A file could not be copied out of a Linux volume; the rest went on (2036)
+    LinuxExtractError(String),
+    /// Linux volume found and its persistence surface staged (2037)
+    LinuxVolumeExtracted(String),
 
     // ─── 3000..3999: Windows Registry & Persistence ─────────────────────────
     /// Failed to open registry hive (3001)
@@ -215,6 +253,8 @@ pub enum FaramirError {
     XdgSyntax(String),
     /// Proc running process parse error (4021)
     ProcParseError(String),
+    /// Identical Linux finding seen twice (usr-merged `/lib` and `/usr/lib`, duplicated collection) (4022)
+    LinuxDuplicateSkipped(String),
 
     // ─── 5000..5999: Timeline Output & CSV ──────────────────────────────────
     /// Output file creation error (5001)
@@ -262,6 +302,25 @@ impl FaramirError {
             Self::VhdOpenFailed(_) => "ERR_ING_VHD_OPEN",
             Self::ImageSegmentSkipped(_) => "ERR_ING_IMAGE_SEGMENT_SKIPPED",
             Self::ImageIncomplete(_) => "ERR_ING_IMAGE_INCOMPLETE",
+            Self::CarveOpenFailed(_) => "ERR_ING_CARVE_OPEN",
+            Self::CarveReadError(_) => "ERR_ING_CARVE_READ",
+            Self::CarveReadStalled(_) => "ERR_ING_CARVE_STALLED",
+            Self::CarveHeaderRejected(_) => "ERR_ING_CARVE_HEADER_REJECTED",
+            Self::CarveHiveTruncated(_) => "ERR_ING_CARVE_HIVE_TRUNCATED",
+            Self::CarveHiveRejected(_) => "ERR_ING_CARVE_HIVE_REJECTED",
+            Self::CarveDuplicate(_) => "ERR_ING_CARVE_DUPLICATE",
+            Self::CarveMatchesExtracted(_) => "ERR_ING_CARVE_MATCHES_EXTRACTED",
+            Self::CarveWriteFailed(_) => "ERR_ING_CARVE_WRITE",
+            Self::CarveNoTarget(_) => "ERR_ING_CARVE_NO_TARGET",
+            Self::CarveHiveRecovered(_) => "ERR_ING_CARVE_HIVE_RECOVERED",
+            Self::CarveAborted(_) => "ERR_ING_CARVE_ABORTED",
+            Self::ExtParseError(_) => "ERR_ING_EXT_PARSE",
+            Self::LvmParseError(_) => "ERR_ING_LVM_PARSE",
+            Self::LvmUnsupportedLayout(_) => "ERR_ING_LVM_UNSUPPORTED_LAYOUT",
+            Self::LinuxFsUnsupported(_) => "ERR_ING_LINUX_FS_UNSUPPORTED",
+            Self::LuksEncrypted(_) => "ERR_ING_LUKS_ENCRYPTED",
+            Self::LinuxExtractError(_) => "ERR_ING_LINUX_EXTRACT",
+            Self::LinuxVolumeExtracted(_) => "ERR_ING_LINUX_VOLUME_EXTRACTED",
 
             Self::HiveOpenFailed(_) => "ERR_WIN_HIVE_OPEN",
             Self::HiveCorrupt(_) => "ERR_WIN_HIVE_CORRUPT",
@@ -333,6 +392,7 @@ impl FaramirError {
             Self::XdgNoExec(_) => "ERR_LNX_XDG_NO_EXEC",
             Self::XdgSyntax(_) => "ERR_LNX_XDG_SYNTAX",
             Self::ProcParseError(_) => "ERR_LNX_PROC_PARSE",
+            Self::LinuxDuplicateSkipped(_) => "ERR_LNX_DUPLICATE_SKIPPED",
 
             Self::OutFileCreateFailed(_) => "ERR_OUT_FILE_CREATE",
             Self::OutCsvWriteError(_) => "ERR_OUT_CSV_WRITE",
@@ -371,6 +431,25 @@ impl FaramirError {
             Self::VhdOpenFailed(_) => 2016,
             Self::ImageSegmentSkipped(_) => 2017,
             Self::ImageIncomplete(_) => 2018,
+            Self::CarveOpenFailed(_) => 2019,
+            Self::CarveReadError(_) => 2020,
+            Self::CarveReadStalled(_) => 2021,
+            Self::CarveHeaderRejected(_) => 2022,
+            Self::CarveHiveTruncated(_) => 2023,
+            Self::CarveHiveRejected(_) => 2024,
+            Self::CarveDuplicate(_) => 2025,
+            Self::CarveMatchesExtracted(_) => 2026,
+            Self::CarveWriteFailed(_) => 2027,
+            Self::CarveNoTarget(_) => 2028,
+            Self::CarveHiveRecovered(_) => 2029,
+            Self::CarveAborted(_) => 2030,
+            Self::ExtParseError(_) => 2031,
+            Self::LvmParseError(_) => 2032,
+            Self::LvmUnsupportedLayout(_) => 2033,
+            Self::LinuxFsUnsupported(_) => 2034,
+            Self::LuksEncrypted(_) => 2035,
+            Self::LinuxExtractError(_) => 2036,
+            Self::LinuxVolumeExtracted(_) => 2037,
 
             Self::HiveOpenFailed(_) => 3001,
             Self::HiveCorrupt(_) => 3002,
@@ -442,6 +521,7 @@ impl FaramirError {
             Self::XdgNoExec(_) => 4019,
             Self::XdgSyntax(_) => 4020,
             Self::ProcParseError(_) => 4021,
+            Self::LinuxDuplicateSkipped(_) => 4022,
 
             Self::OutFileCreateFailed(_) => 5001,
             Self::OutCsvWriteError(_) => 5002,
@@ -475,11 +555,26 @@ impl FaramirError {
             | Self::ControlSetNotFound(_)
             | Self::TechniquePanicked(_)
             | Self::HiveDiscoveryIoError(_)
+            | Self::CarveReadError(_)
+            | Self::CarveReadStalled(_)
+            | Self::CarveHiveTruncated(_)
+            | Self::CarveHiveRejected(_)
+            | Self::CarveNoTarget(_)
+            | Self::LvmUnsupportedLayout(_)
+            | Self::LinuxFsUnsupported(_)
+            | Self::LuksEncrypted(_)
+            | Self::LinuxExtractError(_)
             | Self::ValueEmpty(_) => Severity::Warning,
 
             Self::HiveCompanionSkipped(_)
             | Self::HiveDuplicateSkipped(_)
             | Self::ImageSegmentSkipped(_)
+            | Self::CarveHeaderRejected(_)
+            | Self::CarveDuplicate(_)
+            | Self::CarveMatchesExtracted(_)
+            | Self::CarveHiveRecovered(_)
+            | Self::LinuxVolumeExtracted(_)
+            | Self::LinuxDuplicateSkipped(_)
             | Self::TxLogHiveMismatch(_)
             | Self::TechniqueNoApplicableHive(_)
             | Self::TxLogRemoteMatch(_)
@@ -527,6 +622,25 @@ impl FaramirError {
             | Self::VhdOpenFailed(s)
             | Self::ImageSegmentSkipped(s)
             | Self::ImageIncomplete(s)
+            | Self::CarveOpenFailed(s)
+            | Self::CarveReadError(s)
+            | Self::CarveReadStalled(s)
+            | Self::CarveHeaderRejected(s)
+            | Self::CarveHiveTruncated(s)
+            | Self::CarveHiveRejected(s)
+            | Self::CarveDuplicate(s)
+            | Self::CarveMatchesExtracted(s)
+            | Self::CarveWriteFailed(s)
+            | Self::CarveNoTarget(s)
+            | Self::CarveHiveRecovered(s)
+            | Self::CarveAborted(s)
+            | Self::ExtParseError(s)
+            | Self::LvmParseError(s)
+            | Self::LvmUnsupportedLayout(s)
+            | Self::LinuxFsUnsupported(s)
+            | Self::LuksEncrypted(s)
+            | Self::LinuxExtractError(s)
+            | Self::LinuxVolumeExtracted(s)
             | Self::HiveOpenFailed(s)
             | Self::HiveCorrupt(s)
             | Self::HiveDirtyNoLogs(s)
@@ -596,6 +710,7 @@ impl FaramirError {
             | Self::XdgNoExec(s)
             | Self::XdgSyntax(s)
             | Self::ProcParseError(s)
+            | Self::LinuxDuplicateSkipped(s)
             | Self::OutFileCreateFailed(s)
             | Self::OutCsvWriteError(s)
             | Self::OutCsvFlushFailed(s)
@@ -633,6 +748,25 @@ impl FaramirError {
             Self::VhdOpenFailed(e()),
             Self::ImageSegmentSkipped(e()),
             Self::ImageIncomplete(e()),
+            Self::CarveOpenFailed(e()),
+            Self::CarveReadError(e()),
+            Self::CarveReadStalled(e()),
+            Self::CarveHeaderRejected(e()),
+            Self::CarveHiveTruncated(e()),
+            Self::CarveHiveRejected(e()),
+            Self::CarveDuplicate(e()),
+            Self::CarveMatchesExtracted(e()),
+            Self::CarveWriteFailed(e()),
+            Self::CarveNoTarget(e()),
+            Self::CarveHiveRecovered(e()),
+            Self::CarveAborted(e()),
+            Self::ExtParseError(e()),
+            Self::LvmParseError(e()),
+            Self::LvmUnsupportedLayout(e()),
+            Self::LinuxFsUnsupported(e()),
+            Self::LuksEncrypted(e()),
+            Self::LinuxExtractError(e()),
+            Self::LinuxVolumeExtracted(e()),
             Self::HiveOpenFailed(e()),
             Self::HiveCorrupt(e()),
             Self::HiveDirtyNoLogs(e()),
@@ -702,6 +836,7 @@ impl FaramirError {
             Self::XdgNoExec(e()),
             Self::XdgSyntax(e()),
             Self::ProcParseError(e()),
+            Self::LinuxDuplicateSkipped(e()),
             Self::OutFileCreateFailed(e()),
             Self::OutCsvWriteError(e()),
             Self::OutCsvFlushFailed(e()),
@@ -740,6 +875,25 @@ impl fmt::Display for FaramirError {
             Self::VhdOpenFailed(e) => write!(f, "Cannot open VHD/VHDX: {}", e),
             Self::ImageSegmentSkipped(p) => write!(f, "Secondary image segment skipped (read through its first segment): {}", p),
             Self::ImageIncomplete(e) => write!(f, "Image is incomplete: {}", e),
+            Self::CarveOpenFailed(e) => write!(f, "Cannot open source for carving: {}", e),
+            Self::CarveReadError(e) => write!(f, "Carving read error, block skipped: {}", e),
+            Self::CarveReadStalled(e) => write!(f, "Carving read stalled, reader reopened and window skipped: {}", e),
+            Self::CarveHeaderRejected(e) => write!(f, "regf signature rejected: {}", e),
+            Self::CarveHiveTruncated(e) => write!(f, "Carved hive is truncated, valid prefix kept: {}", e),
+            Self::CarveHiveRejected(e) => write!(f, "Carved hive rejected: {}", e),
+            Self::CarveDuplicate(e) => write!(f, "Carved hive is a duplicate of one already carved: {}", e),
+            Self::CarveMatchesExtracted(e) => write!(f, "Carved hive is identical to an extracted hive, skipped: {}", e),
+            Self::CarveWriteFailed(e) => write!(f, "Cannot write carved hive: {}", e),
+            Self::CarveNoTarget(e) => write!(f, "--carve given but nothing to carve: {}", e),
+            Self::CarveHiveRecovered(e) => write!(f, "Hive carved from raw bytes: {}", e),
+            Self::CarveAborted(e) => write!(f, "Carving abandoned: {}", e),
+            Self::ExtParseError(e) => write!(f, "Cannot open ext2/ext3/ext4 file system: {}", e),
+            Self::LvmParseError(e) => write!(f, "Cannot parse LVM physical volume: {}", e),
+            Self::LvmUnsupportedLayout(e) => write!(f, "LVM logical volume layout not supported (only linear, single PV): {}", e),
+            Self::LinuxFsUnsupported(e) => write!(f, "Linux volume of a kind not read yet: {}", e),
+            Self::LuksEncrypted(e) => write!(f, "LUKS-encrypted volume skipped: {}", e),
+            Self::LinuxExtractError(e) => write!(f, "Could not copy a file out of the Linux volume: {}", e),
+            Self::LinuxVolumeExtracted(e) => write!(f, "Linux volume staged: {}", e),
 
             Self::HiveOpenFailed(p) => write!(f, "Failed to open hive: {}", p),
             Self::HiveCorrupt(p) => write!(f, "Registry hive is corrupt: {}", p),
@@ -811,6 +965,7 @@ impl fmt::Display for FaramirError {
             Self::XdgNoExec(p) => write!(f, "XDG .desktop missing Exec in: {}", p),
             Self::XdgSyntax(e) => write!(f, "XDG .desktop syntax error: {}", e),
             Self::ProcParseError(e) => write!(f, "Proc parse failure: {}", e),
+            Self::LinuxDuplicateSkipped(e) => write!(f, "Duplicate Linux finding skipped: {}", e),
 
             Self::OutFileCreateFailed(p) => write!(f, "Cannot create output CSV file: {}", p),
             Self::OutCsvWriteError(e) => write!(f, "CSV record write failure: {}", e),

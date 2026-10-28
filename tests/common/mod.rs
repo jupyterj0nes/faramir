@@ -678,3 +678,12 @@ pub fn write_dirty(dir: &TempDir, rel: &str, fixture: &DirtyFixture) -> PathBuf 
 pub fn fixture(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(rel)
 }
+
+/// Collision-free suffix for temp file names: nanoseconds plus a process-wide
+/// counter (Windows clocks tick every 100 ns and tests run in parallel).
+#[allow(dead_code)]
+pub fn unique_suffix() -> String {
+    static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    format!("{}_{n}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0))
+}

@@ -63,25 +63,99 @@ pub fn is_linux_target(target: &Path) -> bool {
     false
 }
 
+thread_local! {
+    /// Root of the Linux evidence being processed, so parsers can print
+    /// paths as they were on the host instead of where they were staged.
+    static EVIDENCE_ROOT: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+const TOP_LEVEL_DIRS: &[&str] = &[
+    "etc", "var", "home", "root", "usr", "lib", "lib64", "bin", "sbin", "opt", "run", "srv", "boot", "proc", "tmp", "dev",
+];
+
+/// The path of a collected file as it was on the host: `/etc/cron.daily/apport`.
+///
+/// Strips the evidence root set by [`process_linux_target`], then a UAC
+/// `[root]` marker, and as a last resort everything before the last
+/// well-known top-level directory. Always forward slashes.
+pub fn evidence_path(path: &Path) -> String {
+    let root = EVIDENCE_ROOT.with(|r| r.borrow().clone());
+    let rel = root.as_deref().and_then(|r| path.strip_prefix(r).ok()).unwrap_or(path);
+    let comps: Vec<String> = rel
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(s) => Some(s.to_string_lossy().to_string()),
+            _ => None,
+        })
+        .collect();
+    let mut start = 0usize;
+    if let Some(i) = comps.iter().rposition(|c| c == "[root]") {
+        start = i + 1;
+    } else if root.is_none() {
+        if let Some(i) = comps.iter().rposition(|c| TOP_LEVEL_DIRS.contains(&c.as_str())) {
+            start = i;
+            if i > 0 && matches!(comps[i].as_str(), "lib" | "lib64" | "bin" | "sbin" | "share" | "local") && comps[i - 1] == "usr" {
+                start = i - 1;
+            }
+        }
+    }
+    format!("/{}", comps[start..].join("/"))
+}
+
+/// Key under which two findings count as the same thing. `/usr/lib`, `/usr/bin`
+/// and `/usr/sbin` fold onto `/lib`, `/bin`, `/sbin`: on a usr-merged system
+/// they are one directory, and collectors copy both.
+fn dedupe_key(e: &Event) -> String {
+    let norm = |s: &str| s.replace("/usr/lib/", "/lib/").replace("/usr/bin/", "/bin/").replace("/usr/sbin/", "/sbin/");
+    // the timestamp is left out: a copy with a different mtime is still the same finding
+    format!(
+        "{}|{}|{}|{}|{}",
+        e.artifact,
+        e.subject_username,
+        norm(&e.processname),
+        norm(e.commandline.as_deref().unwrap_or("")),
+        norm(&e.parentprocessname)
+    )
+}
+
+/// Drop findings identical to one already kept; each drop is an INFO diagnostic.
+pub fn dedupe_events(events: Vec<Event>) -> Vec<Event> {
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut out = Vec::with_capacity(events.len());
+    for e in events {
+        if seen.insert(dedupe_key(&e)) {
+            out.push(e);
+        } else {
+            crate::windows::diag::record(crate::errors::FaramirError::LinuxDuplicateSkipped(format!(
+                "{} {}",
+                e.artifact,
+                e.commandline.as_deref().unwrap_or(&e.processname)
+            )));
+        }
+    }
+    out
+}
+
 /// Recursively scans and extracts Linux persistence events from target directory or file
 pub fn process_linux_target(target: &Path, computer_name: &str) -> Vec<Event> {
     let mut events = Vec::new();
+    let root = if target.is_file() { target.parent().map(Path::to_path_buf) } else { Some(target.to_path_buf()) };
+    EVIDENCE_ROOT.with(|r| *r.borrow_mut() = root);
 
     if target.is_file() {
         process_single_file(target, computer_name, &mut events);
-        return events;
-    }
-
-    for entry in WalkDir::new(target).into_iter().flatten() {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
+    } else {
+        for entry in WalkDir::new(target).into_iter().flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            process_single_file(path, computer_name, &mut events);
         }
-
-        process_single_file(path, computer_name, &mut events);
     }
 
-    events
+    EVIDENCE_ROOT.with(|r| *r.borrow_mut() = None);
+    dedupe_events(events)
 }
 
 fn process_single_file(path: &Path, computer_name: &str, events: &mut Vec<Event>) {

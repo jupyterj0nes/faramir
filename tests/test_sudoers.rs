@@ -1,9 +1,10 @@
+mod common;
 use faramir::parsers::linux::sudoers::*;
 use std::fs::File;
 use std::io::Write;
 
 fn create_temp_sudoers(content: &str) -> (std::path::PathBuf, tempfile_guard::FileGuard) {
-    let path = std::env::temp_dir().join(format!("sudoers_{}_{}", std::process::id(), chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)));
+    let path = std::env::temp_dir().join(format!("sudoers_{}_{}", std::process::id(), common::unique_suffix()));
     {
         let mut f = File::create(&path).unwrap();
         f.write_all(content.as_bytes()).unwrap();

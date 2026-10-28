@@ -5,6 +5,13 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
+/// `SHELL=/bin/sh`, `MAILTO=root`, `LANG=C.UTF-8`: a cron environment line, not a job.
+pub fn is_env_assignment(line: &str) -> bool {
+    let Some((key, _)) = line.split_once('=') else { return false };
+    let key = key.trim();
+    !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && !key.starts_with(|c: char| c.is_ascii_digit())
+}
+
 /// Parses system cron files (/etc/crontab, /etc/cron.d/*)
 pub fn parse_cron_system_file(file_path: &Path, computer_name: &str) -> Result<Vec<Event>, LinuxPersistenceError> {
     if !file_path.exists() {
@@ -22,9 +29,9 @@ pub fn parse_cron_system_file(file_path: &Path, computer_name: &str) -> Result<V
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let reader = BufReader::new(file);
@@ -34,26 +41,29 @@ pub fn parse_cron_system_file(file_path: &Path, computer_name: &str) -> Result<V
         let line = line_res.map_err(|e| LinuxPersistenceError::IoError(e.to_string()))?;
         let trimmed = line.trim();
 
-        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("SHELL=")
-            || trimmed.starts_with("PATH=") || trimmed.starts_with("MAILTO=") || trimmed.starts_with("HOME=")
-        {
+        if trimmed.is_empty() || trimmed.starts_with('#') || is_env_assignment(trimmed) {
             continue;
         }
 
-        // Format: min hour dom mon dow USER command
+        // Format: min hour dom mon dow USER command, or @reboot/@daily/… USER command
         let tokens: Vec<&str> = trimmed.split_whitespace().collect();
-        if tokens.len() < 7 {
-            return Err(LinuxPersistenceError::InvalidCronSyntax(format!(
-                "{}:{}: expected at least 7 fields, got {}",
+        let (user_idx, cmd_idx) = if tokens[0].starts_with('@') { (1, 2) } else { (5, 6) };
+        if tokens.len() <= cmd_idx {
+            // one bad line must not hide the rest of the file: report it and go on
+            crate::windows::diag::record(crate::errors::FaramirError::CronSyntax(format!(
+                "{}:{}: expected {} fields, got {}: {}",
                 filename,
                 line_idx + 1,
-                tokens.len()
+                cmd_idx + 1,
+                tokens.len(),
+                trimmed
             )));
+            continue;
         }
 
-        let user = tokens[5].to_string();
-        let cmd_tokens = &tokens[6..];
-        let command = cmd_tokens.join(" ");
+        let user = tokens[user_idx].to_string();
+        let cmd_tokens = &tokens[cmd_idx..];
+        let command = if user_idx == 1 { format!("{} {}", tokens[0], cmd_tokens.join(" ")) } else { cmd_tokens.join(" ") };
         let proc_name = cmd_tokens.first().unwrap_or(&"cron").to_string();
 
         events.push(Event {
@@ -90,9 +100,9 @@ pub fn parse_cron_spool_file(file_path: &Path, computer_name: &str) -> Result<Ve
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     let user = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown").to_string();
     let reader = BufReader::new(file);
@@ -179,9 +189,9 @@ pub fn parse_anacrontab_file(file_path: &Path, computer_name: &str) -> Result<Ve
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     let reader = BufReader::new(file);
     let mut events = Vec::new();
@@ -239,9 +249,9 @@ pub fn parse_cron_periodic_script(file_path: &Path, computer_name: &str) -> Resu
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("cron_script");
     let parent = file_path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()).unwrap_or("cron");
@@ -255,7 +265,7 @@ pub fn parse_cron_periodic_script(file_path: &Path, computer_name: &str) -> Resu
         subject_username: "root".to_string(),
         target_username: "root".to_string(),
         processname: filename.to_string(),
-        commandline: Some(format!("Periodic Cron Script: {}", file_path.display())),
+        commandline: Some(format!("Periodic Cron Script: {}", super::evidence_path(file_path))),
         parentprocessname: "run-parts".to_string(),
     }])
 }

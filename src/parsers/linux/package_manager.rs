@@ -22,9 +22,9 @@ pub fn parse_apt_hook_file(file_path: &Path, computer_name: &str) -> Result<Vec<
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let reader = BufReader::new(file);

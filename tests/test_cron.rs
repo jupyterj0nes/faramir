@@ -1,9 +1,10 @@
+mod common;
 use faramir::parsers::linux::cron::*;
 use std::fs::File;
 use std::io::Write;
 
 fn create_temp_cron(content: &str, prefix: &str) -> (std::path::PathBuf, tempfile_guard::FileGuard) {
-    let path = std::env::temp_dir().join(format!("{}_{}_{}.cron", prefix, std::process::id(), chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)));
+    let path = std::env::temp_dir().join(format!("{}_{}_{}.cron", prefix, std::process::id(), common::unique_suffix()));
     {
         let mut f = File::create(&path).unwrap();
         f.write_all(content.as_bytes()).unwrap();
@@ -79,47 +80,46 @@ fn test_cron_system_not_found_err() {
     assert_eq!(err.error_number(), 1001);
 }
 
+/// A malformed line is reported as `ERR_LNX_CRON_SYNTAX` and skipped; the
+/// file is not abandoned (one bad line used to hide every other job).
 #[test]
-fn test_cron_system_syntax_error_1_field() {
-    let (p, _g) = create_temp_cron("0\n", "sys_cron_bad");
-    let err = parse_cron_system_file(&p, "HOST").unwrap_err();
-    assert_eq!(err.code(), "ERR_LNX_CRON_SYNTAX");
-    assert_eq!(err.error_number(), 2001);
+fn test_cron_system_malformed_lines_are_reported_and_skipped() {
+    for bad in ["0", "0 1", "0 1 2", "0 1 2 3", "0 1 2 3 4", "0 1 2 3 4 root", "@reboot", "@reboot root"] {
+        let (p, _g) = create_temp_cron(&format!("{bad}\n0 2 * * * root /opt/good.sh\n"), "sys_cron_bad");
+        faramir::windows::diag::clear();
+        let evs = parse_cron_system_file(&p, "HOST").unwrap();
+        assert_eq!(evs.len(), 1, "{bad:?}: the good line survives");
+        assert!(evs[0].commandline.as_deref().unwrap().contains("/opt/good.sh"));
+        assert_eq!(faramir::windows::diag::count("ERR_LNX_CRON_SYNTAX"), 1, "{bad:?}");
+        let text = faramir::windows::diag::snapshot()[0].to_string();
+        assert!(text.contains("line 1") || text.contains(":1:"), "{text}");
+    }
 }
 
 #[test]
-fn test_cron_system_syntax_error_2_fields() {
-    let (p, _g) = create_temp_cron("0 1\n", "sys_cron_bad");
-    let err = parse_cron_system_file(&p, "HOST").unwrap_err();
-    assert_eq!(err.code(), "ERR_LNX_CRON_SYNTAX");
+fn test_cron_system_reboot_and_special_schedules() {
+    let (p, _g) = create_temp_cron("@reboot root /opt/lab/boot.sh --now\n@daily bob /home/bob/daily.sh\n@hourly  root  /usr/bin/true\n", "sys_cron_special");
+    let evs = parse_cron_system_file(&p, "HOST").unwrap();
+    assert_eq!(evs.len(), 3);
+    assert_eq!(evs[0].subject_username, "root");
+    assert_eq!(evs[0].processname, "/opt/lab/boot.sh");
+    assert!(evs[0].commandline.as_deref().unwrap().contains("@reboot /opt/lab/boot.sh --now"), "{:?}", evs[0].commandline);
+    assert_eq!(evs[1].subject_username, "bob");
+    assert!(evs[1].commandline.as_deref().unwrap().contains("@daily /home/bob/daily.sh"));
 }
 
 #[test]
-fn test_cron_system_syntax_error_3_fields() {
-    let (p, _g) = create_temp_cron("0 1 2\n", "sys_cron_bad");
-    let err = parse_cron_system_file(&p, "HOST").unwrap_err();
-    assert_eq!(err.code(), "ERR_LNX_CRON_SYNTAX");
-}
-
-#[test]
-fn test_cron_system_syntax_error_4_fields() {
-    let (p, _g) = create_temp_cron("0 1 2 3\n", "sys_cron_bad");
-    let err = parse_cron_system_file(&p, "HOST").unwrap_err();
-    assert_eq!(err.code(), "ERR_LNX_CRON_SYNTAX");
-}
-
-#[test]
-fn test_cron_system_syntax_error_5_fields() {
-    let (p, _g) = create_temp_cron("0 1 2 3 4\n", "sys_cron_bad");
-    let err = parse_cron_system_file(&p, "HOST").unwrap_err();
-    assert_eq!(err.code(), "ERR_LNX_CRON_SYNTAX");
-}
-
-#[test]
-fn test_cron_system_syntax_error_6_fields() {
-    let (p, _g) = create_temp_cron("0 1 2 3 4 root\n", "sys_cron_bad");
-    let err = parse_cron_system_file(&p, "HOST").unwrap_err();
-    assert_eq!(err.code(), "ERR_LNX_CRON_SYNTAX");
+fn test_cron_system_environment_lines_are_not_jobs() {
+    let (p, _g) = create_temp_cron("SHELL=/bin/sh\nPATH=/usr/bin\nMAILTO=root\nLANG=C.UTF-8\nCRON_TZ=UTC\n0 2 * * * root /opt/good.sh\n", "sys_cron_env");
+    faramir::windows::diag::clear();
+    let evs = parse_cron_system_file(&p, "HOST").unwrap();
+    assert_eq!(evs.len(), 1);
+    assert_eq!(faramir::windows::diag::count("ERR_LNX_CRON_SYNTAX"), 0);
+    assert!(is_env_assignment("LANG=C.UTF-8"));
+    assert!(is_env_assignment("MAILTO="));
+    assert!(!is_env_assignment("0 2 * * * root echo a=b"));
+    assert!(!is_env_assignment("=x"));
+    assert!(!is_env_assignment("1ABC=x"));
 }
 
 #[test]

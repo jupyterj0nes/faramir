@@ -67,7 +67,11 @@ pub fn persistence_to_event(p: &Persistence, computer_name: &str) -> Event {
         .technique
         .to_lowercase()
         .replace([' ', '(', ')', '/', '.'], "_");
-    let artifact = if p.source.starts_with("vss:") {
+    let artifact = if p.source.starts_with(crate::carve::SOURCE_CARVED_DELETED) {
+        format!("windows:persistence:carved:deleted:{}", clean_tech)
+    } else if p.source.starts_with(crate::carve::SOURCE_CARVED) {
+        format!("windows:persistence:carved:{}", clean_tech)
+    } else if p.source.starts_with("vss:") {
         format!("windows:persistence:removed_since_vss:{}", clean_tech)
     } else if p.source == deleted::SOURCE_DELETED {
         format!("windows:persistence:deleted:{}", clean_tech)

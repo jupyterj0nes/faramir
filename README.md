@@ -29,13 +29,14 @@ It is the Rust successor of [Boromir](https://github.com/Alexgpsec/Persistence_B
 
 ## Features
 
-- **Reads the evidence itself.** E01, raw, VMDK, VHD/VHDX images, KAPE, Velociraptor, Cortex XDR, CyLR and UAC packages, nested archives, mounted volumes or a single hive. No mounting, no manual extraction.
+- **Reads the evidence itself.** E01, raw, VMDK, VHD/VHDX images with NTFS or ext4 (plain or LVM) volumes, KAPE, Velociraptor, Cortex XDR, CyLR and UAC packages, nested archives, mounted volumes or a single hive. No mounting, no manual extraction.
 - **Rebuilds dirty hives.** Finds `.LOG1`/`.LOG2` wherever the collector left them, checks they belong to the hive, validates every entry and replays them. Verified byte for byte against `rla.exe`.
 - **35 Windows techniques**, each read from the hive it lives in: HKLM `SOFTWARE`/`SYSTEM`, every `NTUSER.DAT`, `DEFAULT` and `UsrClass.dat`, including `Wow6432Node` variants.
 - **Linux persistence**: cron, systemd, shell profiles, SSH, sudoers, PAM, udev, kernel modules, package hooks, `ld.so.preload` and live-process anomalies.
 - **Deleted persistence**: keys and values recovered from freed hive cells, plus anything that existed in a Volume Shadow Copy but is gone from the live volume.
+- **Carving, when you ask for it.** `--carve` scans the raw bytes of an image, a pagefile or a memory dump for whole registry hives that no file system points to any more, and runs every technique on them. Off by default; every finding it adds is tagged `carved`.
 - **One CSV timeline** with the same columns as [masstin](https://github.com/jupyterj0nes/masstin), so persistence and lateral movement from the same case concatenate.
-- **Nothing silent**: 90+ numbered diagnostic codes with a severity; a corrupt log, a renamed hive or a parser panic is reported and the run goes on.
+- **Nothing silent**: 100+ numbered diagnostic codes with a severity; a corrupt log, a renamed hive or a parser panic is reported and the run goes on.
 
 ## Demo
 
@@ -80,12 +81,13 @@ faramir [OPTIONS] [ACTION]
 | `-o, --output <FILE>` | Output CSV. Default `faramir.output.csv`. |
 | `--verbose` | Also print informational diagnostics (companion files skipped, logs matched outside the hive folder, hives rebuilt). |
 | `--silent` | No console output. |
+| `--carve` | Also scan the raw bytes of every disk image, and of any `-f` file that is not a hive, for registry hives. Reads the whole image, so it is opt-in. Findings are tagged `carved`. |
 | `--source-evidence <DIR>`, `--csv-output <DIR>` | Legacy Boromir flags, still accepted. |
 | `[ACTION]` | `all` (default), any `get-*` technique from the tables below, `get-deleted-persistence`, `get-linux-persistence`. |
 
 ## Examples
 
-**A forensic image.** Partitions are found (MBR and GPT), the registry, user hives and tasks are pulled out of NTFS, every Volume Shadow Copy is processed too:
+**A forensic image.** Partitions are found (MBR and GPT). On NTFS the registry, user hives and tasks are pulled out and every Volume Shadow Copy is processed too; on ext4 (plain or inside LVM) the cron, systemd, shell, SSH, sudo, PAM, udev and module configuration comes out with the host name from `/etc/hostname`. A disk that holds both gives two hosts:
 
 ```bash
 faramir -f /cases/HRSERVER.E01 -o /cases/hrserver_persistence.csv
@@ -149,18 +151,28 @@ tail -n +2 persistence.csv >> lateral.csv
 faramir -f /cases/WS01.zip -o ws01.csv --verbose
 ```
 
+**Carve what the file system no longer has.** The image is processed as usual, then its raw bytes are scanned for hives: old `RegBack` copies, deleted user profiles, pages of snapshots that were purged, hives sitting in a pagefile or a memory dump. Every technique runs on what comes out, and only what the live registry does not already show is added, tagged `carved`:
+
+```bash
+faramir -f /cases/HRSERVER.E01 -o hrserver.csv --carve
+faramir -f /cases/pagefile.sys -o pagefile.csv --carve
+faramir -f /cases/WS01.mem -o ws01_memory.csv --carve
+```
+
 ## Supported evidence
 
 | Input | Handling |
 |---|---|
-| `.E01` / `.Ex01` | EWF reader, NTFS parsed in place. MBR and GPT partitions; BitLocker volumes reported and skipped; every Volume Shadow Copy extracted and diffed against the live volume. |
-| `.dd` `.raw` `.img` `.001` | Raw and split-raw images. |
+| `.E01` / `.Ex01` | EWF reader, file systems parsed in place. MBR and GPT partitions; every partition is identified by its signature, not its type code. |
+| `.dd` `.raw` `.img` `.001` | Raw and split-raw images, whole disks or single volumes. |
+| NTFS volumes | Registry, user hives, tasks and event logs extracted; BitLocker volumes reported and skipped; every Volume Shadow Copy extracted and diffed against the live volume. |
+| Linux volumes | ext2/ext3/ext4, as a partition or as a linear LVM logical volume (any VG, any number of LVs, one PV). The persistence surface is copied out as a root tree; usr-merged `/lib` is read once. XFS, btrfs, F2FS and LUKS volumes are recognised and reported, not read. |
 | `.vmdk` | Monolithic or split, sparse or flat, streamOptimized (compressed). Snapshots, `-flat` and `-sNNN` extents are read through their descriptor. |
 | `.vhd` `.vhdx` | Fixed and dynamic. Differencing disks are reported as incomplete. |
 | `.zip` `.tar` `.tar.gz` `.tgz` | Only forensic artifacts are extracted. Nested archives are expanded in place. Encrypted zips are tried with the usual forensic passwords. |
 | KAPE, Velociraptor, Cortex XDR, CyLR, UAC | Detected from their markers; the host name comes from the package. |
 | Directory | Mounted volume or already-extracted collection, Windows or Linux. |
-| Single file | A hive (with its logs beside it), a systemd unit, a crontab, a shell profile. |
+| Single file | A hive (with its logs beside it), a systemd unit, a crontab, a shell profile. With `--carve`, any other file is scanned for hives (pagefile, hiberfil, memory dump, unallocated-space dump). |
 
 Hives are recognised by name **and** by header, so `bob_NTUSER.DAT`, `HOST-SOFTWARE`, `C_Windows_System32_config_SYSTEM`, `SOFTWARE.hve` or `artifact_0017.bin` all work.
 
@@ -202,17 +214,18 @@ Hives are recognised by name **and** by header, so `bob_NTUSER.DAT`, `HOST-SOFTW
 | | `get-silent-process-exit` | `MonitorProcess` | T1546.012 |
 | **Removed** | `get-deleted-persistence` | Keys and values recovered from freed hive cells, placed back on their path and matched against the locations above | |
 | | *(automatic on images)* | Items present in a Volume Shadow Copy but gone from the live volume | |
+| | *(`--carve`)* | Every technique above, run on hives carved from the raw bytes of the image and absent from the live registry | |
 
 ### Linux
 
-`get-linux-persistence` runs on a mounted root, a UAC package or any folder with the usual `etc/`, `var/`, `home/` layout.
+`get-linux-persistence` runs on a disk image with ext4 volumes, a mounted root, a UAC package or any folder with the usual `etc/`, `var/`, `home/` layout.
 
 | Area | Artifacts |
 |---|---|
 | Scheduled | `/etc/crontab`, `cron.d`, user spools, `cron.{hourly,daily,weekly,monthly}`, anacron |
 | systemd | services, timers, sockets, paths, generators |
 | Shell and session | `/etc/profile`, `profile.d`, `bashrc` / `zshrc` / `.profile`, `rc.local`, XDG autostart |
-| Credentials and access | `authorized_keys`, `AuthorizedKeysCommand`, `ForceCommand`, sudoers `NOPASSWD` and `Defaults` overrides, PAM `pam_exec` backdoors, `pam_permit` bypasses, custom module paths |
+| Credentials and access | `authorized_keys`, `AuthorizedKeysCommand`, `ForceCommand`, sudoers `NOPASSWD` and `Defaults` overrides, PAM `pam_exec` backdoors, `pam_permit` placed first in a stack or with a stack-ending control (Debian's stock closers are not reported), custom module paths |
 | Kernel and libraries | `ld.so.preload`, `modules-load.d`, `modprobe.d` `install` commands, udev `RUN` actions |
 | Package manager | APT hooks |
 | Live state | processes running a deleted binary, execution from `/tmp` |
@@ -225,17 +238,18 @@ One CSV, ten columns, the same schema masstin writes:
 |---|---|
 | `timestamp` | `2024-01-17 21:20:00.000` (key last-write time) |
 | `computer` | `WS01` |
-| `artifact` | `windows:persistence:registry_run_key`, `windows:persistence:deleted:windows_service`, `windows:persistence:removed_since_vss:registry_run_key`, `linux:ssh:authorized_key` |
+| `artifact` | `windows:persistence:registry_run_key`, `windows:persistence:deleted:windows_service`, `windows:persistence:removed_since_vss:registry_run_key`, `windows:persistence:carved:registry_run_key`, `windows:persistence:carved:deleted:…`, `linux:ssh:authorized_key` |
 | `event_id` / `pid` | `0` for persistence rows |
 | `subject_username` / `target_username` | `System`, `User`, `root` |
 | `processname` | `updater.exe` |
 | `commandline` | `C:\ProgramData\updater.exe --silent` |
-| `parentprocessname` | Where it was found: the hive path, the key, the unit file, the snapshot |
+| `parentprocessname` | Where it was found: the hive path, the key, the unit file, the snapshot, the carved hive with its write time and image offset |
 
 ```
 "2026-10-28 12:00:00.000","WS01","windows:persistence:registry_run_key",0,0,"User","User","bob.exe","C:\Users\bob\bob.exe","…\entry_50_0\NTUSER.DAT"
 "2026-10-28 12:00:00.000","WS01","windows:persistence:windows_service",0,0,"System","System","EvilSvc","EvilSvc","C:\Windows\Temp\evilsvc.exe"
 "","WS01","windows:persistence:deleted:deleted_registry_persistence",0,0,"Unknown","Unknown","d.exe","C:\Users\Public\d.exe -s","deleted value Dropper (key unknown)"
+"2026-09-30 08:15:42.000","WS01","windows:persistence:carved:registry_run_key",0,0,"System","System","upd.exe","C:\ProgramData\upd.exe","carved SOFTWARE hive written 2026-09-30 08:15:42.000 at offset 0x1c3f80000 (71303168 bytes, 17408 bin(s), complete): …\carved\carved_0001c3f80000_SOFTWARE.regf"
 ```
 
 ## Diagnostics
@@ -266,13 +280,17 @@ The catalogue is in `src/errors.rs`: `1xxx` system, `2xxx` ingestion, `3xxx` Win
 
 **Shadow copies.** Every snapshot of an NTFS partition goes through the same extraction as the live volume. A finding that exists only in a snapshot is reported once, with the snapshot's creation time.
 
+**Linux volumes.** Each partition is sniffed for what it holds (NTFS, ext, LVM, XFS, btrfs, LUKS, swap, FAT). An ext volume is opened with `ext4-view` and the files the Linux techniques read are copied out keeping their tree, following symlinked units but not symlinked directories, and skipping `/lib`, `/bin` and `/sbin` when they are the usr-merge links. An LVM physical volume is parsed with the `lvm2` crate and every linear logical volume with an ext signature is read in place through its extent map, no temporary dump. One image reader is shared by the NTFS, VSS and ext code paths. The same layout masstin uses for its Linux logs.
+
+**Carving.** With `--carve`, the image is read in 4 MB blocks and every sector-aligned `regf` signature is checked: primary hive, supported version, sane sizes, a hive bin right behind it. Each bin carries its own offset, so a hive is pulled out by following the chain and stops exactly where the chain breaks; the root key is verified before anything is kept. A truncated hive keeps its valid prefix and says so. Copies identical to a hive extracted from the live file system are skipped; a copy that only matches a shadow-copy hive is still carved, because a deleted hive seen in a snapshot and in the raw bytes is two pieces of evidence. Carved hives are written to the staging folder and go through the normal pipeline, transaction-log search included. A carved finding identical to a live one (same technique, location, value and access) is dropped and counted. On E01 images every read runs with a time budget, so a damaged segment costs a skipped window instead of a hung run. The block scanner and the guarded reader are the EVTX carver design from masstin.
+
 ## Testing
 
 ```bash
 cargo test
 ```
 
-906 tests. The suite builds its own hives and transaction logs (a small regf/HvLE writer with real Marvin32 hashes), replays a real Windows 10 dirty hive and compares the result with `rla.exe` byte for byte, cross-checks deleted-cell recovery with `RECmd --recover`, runs a synthetic Cortex XDR package through the binary end to end, and reads synthetic VHD, VHDX and VMDK images through the NTFS extractor.
+1004 tests. The suite builds its own hives and transaction logs (a small regf/HvLE writer with real Marvin32 hashes), replays a real Windows 10 dirty hive and compares the result with `rla.exe` byte for byte, cross-checks deleted-cell recovery with `RECmd --recover`, runs a synthetic Cortex XDR package through the binary end to end, reads synthetic VHD, VHDX and VMDK images through the NTFS extractor, and carves hives out of synthetic disks with bad sectors, stalled reads, overwritten bins and copies cut by the end of the image. `scripts/carve_lab.ps1` builds a real NTFS volume on a Windows host (saved hives, a shadow copy, deletions with TRIM off) and `cargo test --test test_carve_lab -- --ignored` with `FARAMIR_CARVELAB` pointing at its output checks every carved hive against the clusters NTFS had given the file. `scripts/linux_collect.sh` makes a read-only UAC-style collection of a Linux host; the one taken from an Ubuntu 22.04 domain member is what the usr-merge deduplication, host-relative paths and timestamp format were corrected against. `scripts/linux_disk_lab.sh` builds, on a Linux host, a GPT+ext4 image and an MBR+LVM+ext4 image with one canary per technique (both ship as fixtures under `tests/fixtures/linux_disk/`) plus a 256 MB ext4 image of that host's real configuration for `cargo test --test test_linux_disk -- --ignored` with `FARAMIR_LINUXDISK`.
 
 ## Credits
 

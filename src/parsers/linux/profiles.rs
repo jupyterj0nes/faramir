@@ -42,8 +42,47 @@ pub fn evaluate_shell_line(line: &str) -> Option<&'static str> {
     if (trimmed.contains("/tmp/") || trimmed.contains("/dev/shm/") || trimmed.contains("/var/tmp/")) && (trimmed.contains(".sh") || trimmed.contains("./") || trimmed.ends_with('&')) {
         return Some("temp_directory_script_execution");
     }
+    if let Some(target) = executed_path(trimmed) {
+        if is_unusual_exec_location(target) {
+            return Some("unusual_location_execution");
+        }
+        if is_backgrounded(trimmed) {
+            return Some("background_execution");
+        }
+    }
 
     None
+}
+
+/// The absolute path a profile line runs, when its command position holds
+/// one: `/opt/x/run.sh`, `exec /opt/x/run.sh`, `nohup /opt/x/run.sh &`,
+/// `. /opt/x/env.sh`, `source /opt/x/env.sh`, `(/opt/x/run.sh &)`.
+pub fn executed_path(line: &str) -> Option<&str> {
+    let mut tokens = line.trim_start_matches('(').split_whitespace().peekable();
+    while let Some(t) = tokens.peek() {
+        if matches!(*t, "exec" | "nohup" | "setsid" | "source" | "." | "sudo" | "eval" | "command" | "bash" | "sh" | "zsh") {
+            tokens.next();
+        } else {
+            break;
+        }
+    }
+    let first = tokens.next()?;
+    let first = first.trim_matches(|c| c == '"' || c == '\'' || c == ')');
+    first.starts_with('/').then_some(first)
+}
+
+/// Executables that belong in a login script live in `/usr`, `/bin`, `/sbin`,
+/// `/etc` and `/lib`; anything run from `/opt`, `/home`, `/root`, `/srv`,
+/// `/var`, `/mnt`, `/media` or a hidden directory deserves a row.
+pub fn is_unusual_exec_location(path: &str) -> bool {
+    let roots = ["/opt/", "/home/", "/root/", "/srv/", "/var/", "/mnt/", "/media/", "/run/user/"];
+    roots.iter().any(|r| path.starts_with(r)) || path.contains("/.")
+}
+
+/// `… &` (not `&&`), `nohup …`, `setsid …`.
+pub fn is_backgrounded(line: &str) -> bool {
+    let t = line.trim_end();
+    (t.ends_with('&') && !t.ends_with("&&")) || t.starts_with("nohup ") || t.starts_with("setsid ") || t.starts_with("(") && t.ends_with("&)")
 }
 
 /// Parses shell profile or RC script (/etc/profile, ~/.bashrc, rc.local, etc.)
@@ -63,9 +102,9 @@ pub fn parse_shell_script(file_path: &Path, computer_name: &str) -> Result<Vec<E
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let is_rc_local = filename == "rc.local";

@@ -22,9 +22,9 @@ pub fn parse_ssh_authorized_keys(file_path: &Path, computer_name: &str) -> Resul
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     // Extract username from path (/home/<username>/.ssh/authorized_keys or /root/.ssh/authorized_keys)
     let user = file_path
@@ -108,9 +108,9 @@ pub fn parse_sshd_config(file_path: &Path, computer_name: &str) -> Result<Vec<Ev
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     let reader = BufReader::new(file);
     let mut events = Vec::new();

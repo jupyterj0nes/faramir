@@ -22,9 +22,9 @@ pub fn parse_kernel_modules_config(file_path: &Path, computer_name: &str) -> Res
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let is_modprobe = filename.ends_with(".conf") && file_path.to_string_lossy().contains("modprobe.d");

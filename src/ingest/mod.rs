@@ -1,5 +1,6 @@
 pub mod archive;
 pub mod image;
+pub mod linux_image;
 pub mod triage;
 pub mod vhd;
 pub mod vmdk;
@@ -60,7 +61,10 @@ pub fn discover_evidence_targets(
     if let Some(file_list) = raw_files {
         for f in file_list {
             let path = Path::new(f);
-            if path.exists() {
+            if crate::carve::is_device_path(path) {
+                // a raw device has no usable metadata; the carver sizes it when opening
+                direct_files.push(path.to_path_buf());
+            } else if path.exists() {
                 if image::is_supported_image(path) {
                     images.push(path.to_path_buf());
                 } else if image::is_secondary_image_segment(path) {

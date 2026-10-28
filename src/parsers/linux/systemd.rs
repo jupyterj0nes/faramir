@@ -22,9 +22,9 @@ pub fn parse_systemd_service(file_path: &Path, computer_name: &str) -> Result<Ve
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let reader = BufReader::new(file);
@@ -115,9 +115,9 @@ pub fn parse_systemd_timer(file_path: &Path, computer_name: &str) -> Result<Vec<
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let reader = BufReader::new(file);
@@ -195,9 +195,9 @@ pub fn parse_systemd_socket_or_path(file_path: &Path, computer_name: &str) -> Re
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let is_socket = filename.ends_with(".socket");
@@ -264,9 +264,9 @@ pub fn parse_systemd_generator(file_path: &Path, computer_name: &str) -> Result<
         .ok()
         .map(|st| {
             let dt: DateTime<Utc> = st.into();
-            dt.to_rfc3339()
+            dt.format(crate::windows::techniques::FORMAT_DATE).to_string()
         })
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
     let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
@@ -279,7 +279,7 @@ pub fn parse_systemd_generator(file_path: &Path, computer_name: &str) -> Result<
         subject_username: "root".to_string(),
         target_username: "root".to_string(),
         processname: filename.to_string(),
-        commandline: Some(format!("Systemd Generator Executable: {}", file_path.display())),
+        commandline: Some(format!("Systemd Generator Executable: {}", super::evidence_path(file_path))),
         parentprocessname: "systemd".to_string(),
     }])
 }

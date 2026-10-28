@@ -599,8 +599,8 @@ pub fn unpack_disk_image(
             &format!("  ├─ E01 acquired capacity: {:.2} GB", total_size as f64 / 1_073_741_824.0),
         );
 
-        let mut buf_reader = BufReader::new(ewf_reader);
-        process_seekable_image(&mut buf_reader, total_size, &out_dir, silent)?;
+        let buf_reader = BufReader::new(ewf_reader);
+        process_seekable_image(buf_reader, total_size, &out_dir, silent)?;
     } else if lower.ends_with(".vmdk") {
         let reader = super::vmdk::VmdkReader::open(&path_str).map_err(|e| {
             let msg = format!("{}: {e}", image_path.display());
@@ -615,8 +615,8 @@ pub fn unpack_disk_image(
             silent,
             &format!("  ├─ VMDK virtual disk capacity: {:.2} GB", total_size as f64 / 1_073_741_824.0),
         );
-        let mut buf_reader = BufReader::new(reader);
-        process_seekable_image(&mut buf_reader, total_size, &out_dir, silent)?;
+        let buf_reader = BufReader::new(reader);
+        process_seekable_image(buf_reader, total_size, &out_dir, silent)?;
     } else if lower.ends_with(".vhd") || lower.ends_with(".vhdx") {
         let (reader, total_size) = super::vhd::open_virtual_disk(&path_str).map_err(|e| {
             let msg = format!("{}: {e}", image_path.display());
@@ -630,8 +630,8 @@ pub fn unpack_disk_image(
             silent,
             &format!("  ├─ VHD/VHDX virtual disk capacity: {:.2} GB", total_size as f64 / 1_073_741_824.0),
         );
-        let mut buf_reader = BufReader::new(reader);
-        process_seekable_image(&mut buf_reader, total_size, &out_dir, silent)?;
+        let buf_reader = BufReader::new(reader);
+        process_seekable_image(buf_reader, total_size, &out_dir, silent)?;
     } else {
         let file = File::open(image_path)?;
         let total_size = file.metadata()?.len();
@@ -640,30 +640,60 @@ pub fn unpack_disk_image(
             &format!("  ├─ RAW disk image capacity: {:.2} GB", total_size as f64 / 1_073_741_824.0),
         );
 
-        let mut buf_reader = BufReader::new(file);
-        process_seekable_image(&mut buf_reader, total_size, &out_dir, silent)?;
+        let buf_reader = BufReader::new(file);
+        process_seekable_image(buf_reader, total_size, &out_dir, silent)?;
     }
 
     Ok(out_dir)
 }
 
-/// Processes seekable disk image reader: locates partitions, extracts artifacts and Volume Shadow Copies
-fn process_seekable_image<R: Read + Seek>(
-    reader: &mut R,
+/// Processes a seekable disk image: locates partitions, extracts Windows
+/// artifacts and Volume Shadow Copies from NTFS volumes, the persistence
+/// surface from Linux volumes (ext2/3/4, plain or in LVM), and reports every
+/// other volume kind it recognises.
+fn process_seekable_image<R: Read + Seek + 'static>(
+    reader: R,
     image_size: u64,
     out_dir: &Path,
     silent: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let partitions = find_ntfs_partitions(reader, image_size).map_err(|e| format!("Partition scan error: {}", e))?;
+    use super::linux_image::{self as lx, VolumeKind};
+    let shared = lx::SharedReader::new(reader);
+    let mut reader = shared.clone();
+    let reader = &mut reader;
 
-    if partitions.is_empty() {
-        return Err("No valid NTFS partitions found in disk image (check if BitLocker encrypted)".into());
+    let partitions = find_ntfs_partitions(reader, image_size).map_err(|e| format!("Partition scan error: {}", e))?;
+    let volumes = lx::list_volumes(&shared, image_size);
+    let linux: Vec<&lx::Volume> = volumes.iter().filter(|v| v.kind.is_readable_linux() || v.kind == VolumeKind::Lvm).collect();
+
+    for v in &volumes {
+        let what = format!("{} partition at offset {:#x} ({:.2} GB, {})", v.kind.label(), v.offset, v.size as f64 / 1_073_741_824.0, v.table);
+        match v.kind {
+            VolumeKind::Luks => {
+                crate::windows::diag::record(crate::errors::FaramirError::LuksEncrypted(what));
+            }
+            k if k.is_unsupported_linux() => {
+                crate::windows::diag::record(crate::errors::FaramirError::LinuxFsUnsupported(what));
+            }
+            _ => {}
+        }
     }
 
-    log_message(
-        silent,
-        &format!("  ├─ Found {} NTFS partition(s). Extracting forensic execution artifacts...", partitions.len()),
-    );
+    if partitions.is_empty() && linux.is_empty() {
+        let seen: Vec<String> = volumes.iter().map(|v| format!("{} at {:#x}", v.kind.label(), v.offset)).collect();
+        return Err(format!(
+            "No NTFS or Linux (ext2/3/4, LVM) partitions found in disk image{}",
+            if seen.is_empty() { " (no partition table, no known file system at offset 0)".to_string() } else { format!("; found: {}", seen.join(", ")) }
+        )
+        .into());
+    }
+
+    if !partitions.is_empty() {
+        log_message(
+            silent,
+            &format!("  ├─ Found {} NTFS partition(s). Extracting forensic execution artifacts...", partitions.len()),
+        );
+    }
 
     let mut total_extracted = 0;
 
@@ -693,6 +723,62 @@ fn process_seekable_image<R: Read + Seek>(
         }
 
         total_extracted += extract_vss_stores(reader, part_offset, out_dir, idx, silent);
+    }
+
+    if !linux.is_empty() {
+        log_message(silent, &format!("  ├─ Found {} Linux volume(s). Extracting persistence surface...", linux.len()));
+    }
+    for (idx, v) in linux.iter().enumerate() {
+        let part_idx = partitions.len() + idx;
+        let label = format!("partition {} at offset {:#x}", part_idx + 1, v.offset);
+        match v.kind {
+            VolumeKind::Ext => {
+                let dir = lx::linux_dir_name(part_idx, None);
+                match lx::extract_from_ext(&shared, v.offset, &out_dir.join(&dir), &label) {
+                    Ok(x) => {
+                        total_extracted += x.files;
+                        log_message(silent, &format!("  ├─ Partition {}: ext4, host '{}', {} file(s) staged", part_idx + 1, x.hostname.as_deref().unwrap_or("?"), x.files));
+                        crate::windows::diag::record(crate::errors::FaramirError::LinuxVolumeExtracted(format!("{label}: {} file(s) into {dir}", x.files)));
+                    }
+                    Err(e) => {
+                        crate::windows::diag::record(e);
+                    }
+                }
+            }
+            VolumeKind::Lvm => match lx::list_logical_volumes(&shared, v.offset, &label) {
+                Ok((lvm, lvs)) => {
+                    log_message(silent, &format!("  ├─ Partition {}: LVM, {} logical volume(s)", part_idx + 1, lvs.len()));
+                    for lv in &lvs {
+                        let lv_label = format!("{label}, LV {}/{}", lv.vg, lv.name);
+                        match lv.kind {
+                            VolumeKind::Ext => {
+                                let dir = lx::linux_dir_name(part_idx, Some(lv));
+                                match lx::extract_from_lv(&shared, v.offset, std::rc::Rc::clone(&lvm), lv, &out_dir.join(&dir), &lv_label) {
+                                    Ok(x) => {
+                                        total_extracted += x.files;
+                                        log_message(silent, &format!("  │    LV {}/{}: ext4, host '{}', {} file(s) staged", lv.vg, lv.name, x.hostname.as_deref().unwrap_or("?"), x.files));
+                                        crate::windows::diag::record(crate::errors::FaramirError::LinuxVolumeExtracted(format!("{lv_label}: {} file(s) into {dir}", x.files)));
+                                    }
+                                    Err(e) => {
+                                        crate::windows::diag::record(e);
+                                    }
+                                }
+                            }
+                            VolumeKind::Xfs => {
+                                crate::windows::diag::record(crate::errors::FaramirError::LinuxFsUnsupported(format!("{lv_label}: XFS ({} bytes)", lv.size)));
+                            }
+                            _ => {
+                                crate::windows::diag::record(crate::errors::FaramirError::LinuxFsUnsupported(format!("{lv_label}: no ext2/3/4 or XFS signature ({} bytes, swap or data volume?)", lv.size)));
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    crate::windows::diag::record(e);
+                }
+            },
+            _ => {}
+        }
     }
 
     log_message(

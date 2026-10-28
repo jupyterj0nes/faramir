@@ -1,10 +1,11 @@
+mod common;
 use faramir::parsers::linux::*;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
 
 fn create_mock_linux_tree(prefix: &str) -> (PathBuf, tempfile_guard::DirGuard) {
-    let base = std::env::temp_dir().join(format!("lnx_tree_{}_{}_{}", prefix, std::process::id(), chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)));
+    let base = std::env::temp_dir().join(format!("lnx_tree_{}_{}_{}", prefix, std::process::id(), common::unique_suffix()));
     fs::create_dir_all(&base).unwrap();
     let guard = tempfile_guard::DirGuard(base.clone());
     (base, guard)

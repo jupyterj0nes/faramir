@@ -361,7 +361,7 @@ fn ingest_image_error_codes() {
     let mut nums: Vec<u32> = FaramirError::catalog().iter().map(|e| e.error_number()).filter(|n| (2000..3000).contains(n)).collect();
     nums.sort_unstable();
     assert_eq!(nums.first(), Some(&2001));
-    assert_eq!(nums.last(), Some(&2018));
+    assert_eq!(nums.last(), Some(&2037));
     for w in nums.windows(2) {
         assert_eq!(w[1], w[0] + 1);
     }
