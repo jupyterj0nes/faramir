@@ -242,6 +242,8 @@ dependencies = [
 [[package]]
 name = "blockcarve"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0327d4e5f3278a7b33fc0a2817154aefe4eff9e56b75bf1bcb85890fcbab8c3"
 dependencies = [
  "mft",
  "walkdir",
@@ -2030,7 +2032,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
