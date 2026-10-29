@@ -3,16 +3,14 @@
 //! be exercised with hand-built, deterministic evidence.
 #![allow(dead_code)]
 
-use std::hash::Hasher;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use marvin32::Marvin32;
+use blockcarve::hive_logs::{marvin32, MARVIN32_SEED as MARVIN_SEED};
 
 pub const FILETIME_2024: u64 = 133_500_000_000_000_000;
 pub const BASE_BLOCK: usize = 4096;
 pub const HBIN_HEADER: usize = 32;
-const MARVIN_SEED: u64 = 0x82EF_4D88_7A4E_55C5;
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -538,56 +536,12 @@ pub fn full_page_entry(sequence: u32, hbin: &[u8]) -> LogEntryDef {
     }
 }
 
-fn marvin(parts: &[&[u8]]) -> u32 {
-    let mut h = Marvin32::new(MARVIN_SEED);
-    for p in parts {
-        h.write(p);
-    }
-    let v = h.finish();
-    assert!(v <= u32::MAX as u64);
-    v as u32
-}
-
-fn marvin_u32s(prefix: &[u8], fields: &[u32]) -> u32 {
-    let mut h = Marvin32::new(MARVIN_SEED);
-    h.write(prefix);
-    for f in fields {
-        h.write_u32(*f);
-    }
-    let v = h.finish();
-    assert!(v <= u32::MAX as u64);
-    v as u32
-}
-
-/// Serialise one HvLE entry exactly as nt_hive2 validates it.
+/// Serialise one HvLE entry as Windows writes it: both Marvin32 hashes stored in full
+/// (64 bits), Hash-1 over everything after the 40-byte header, Hash-2 over the first 32 bytes.
 pub fn encode_log_entry(e: &LogEntryDef) -> Vec<u8> {
     let payload: usize = e.pages.iter().map(|(_, p)| p.len()).sum();
     let raw = 40 + 8 * e.pages.len() + payload;
     let size = raw.div_ceil(512) * 512;
-    let slack = vec![0u8; size - raw];
-
-    let mut refs = Vec::new();
-    for (off, page) in &e.pages {
-        refs.extend_from_slice(&off.to_le_bytes());
-        refs.extend_from_slice(&(page.len() as u32).to_le_bytes());
-    }
-    let mut hash1 = Marvin32::new(MARVIN_SEED);
-    for (off, page) in &e.pages {
-        hash1.write_u32(*off);
-        hash1.write_u32(page.len() as u32);
-    }
-    for (_, page) in &e.pages {
-        hash1.write(page);
-    }
-    hash1.write(&slack);
-    let h1 = hash1.finish();
-    assert!(h1 <= u32::MAX as u64);
-    let h1 = h1 as u32;
-
-    let h2 = marvin_u32s(
-        b"HvLE",
-        &[size as u32, 0, e.sequence, e.hbin_data_size, e.pages.len() as u32, h1, 0],
-    );
 
     let mut out = Vec::with_capacity(size);
     out.extend_from_slice(b"HvLE");
@@ -596,16 +550,19 @@ pub fn encode_log_entry(e: &LogEntryDef) -> Vec<u8> {
     out.extend_from_slice(&e.sequence.to_le_bytes());
     out.extend_from_slice(&e.hbin_data_size.to_le_bytes());
     out.extend_from_slice(&(e.pages.len() as u32).to_le_bytes());
-    out.extend_from_slice(&h1.to_le_bytes());
-    out.extend_from_slice(&0u32.to_le_bytes());
-    out.extend_from_slice(&h2.to_le_bytes());
-    out.extend_from_slice(&0u32.to_le_bytes());
-    out.extend_from_slice(&refs);
+    out.resize(40, 0);
+    for (off, page) in &e.pages {
+        out.extend_from_slice(&off.to_le_bytes());
+        out.extend_from_slice(&(page.len() as u32).to_le_bytes());
+    }
     for (_, page) in &e.pages {
         out.extend_from_slice(page);
     }
-    out.extend_from_slice(&slack);
-    let _ = marvin(&[]);
+    out.resize(size, 0);
+    let h1 = marvin32(MARVIN_SEED, &out[40..]);
+    out[24..32].copy_from_slice(&h1.to_le_bytes());
+    let h2 = marvin32(MARVIN_SEED, &out[..32]);
+    out[32..40].copy_from_slice(&h2.to_le_bytes());
     out
 }
 

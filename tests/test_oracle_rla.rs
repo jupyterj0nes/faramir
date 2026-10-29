@@ -4,7 +4,7 @@ mod common;
 
 use common::*;
 use faramir::windows::diag;
-use faramir::windows::hives::{open_hive_path, HiveFile};
+use faramir::windows::hives::{open_hive_path, HiveFile, HiveSource};
 use nt_hive2::{Hive, HiveParseMode, KeyNode};
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -40,7 +40,7 @@ fn dump(hive: &mut HiveFile) -> Dump {
 }
 
 fn open_clean(path: &std::path::Path) -> HiveFile {
-    Hive::new(BufReader::new(File::open(path).unwrap()), HiveParseMode::NormalWithBaseBlock)
+    Hive::new(HiveSource::File(BufReader::new(File::open(path).unwrap())), HiveParseMode::NormalWithBaseBlock)
         .unwrap()
         .treat_hive_as_clean()
 }
@@ -101,8 +101,8 @@ fn faramir_replay_matches_rla_bytes() {
 fn dirty_tree_differs_from_replayed_tree() {
     // Sanity: the logs actually change something, otherwise the oracle proves nothing.
     let mut dirty = {
-        let h: Hive<BufReader<File>, nt_hive2::DirtyHive> =
-            Hive::new(BufReader::new(File::open(fixture("dirty_hive/NewDirtyHive")).unwrap()), HiveParseMode::NormalWithBaseBlock).unwrap();
+        let h: Hive<HiveSource, nt_hive2::DirtyHive> =
+            Hive::new(HiveSource::File(BufReader::new(File::open(fixture("dirty_hive/NewDirtyHive")).unwrap())), HiveParseMode::NormalWithBaseBlock).unwrap();
         h.treat_hive_as_clean()
     };
     let mut rla = open_clean(&fixture("dirty_hive/NewDirtyHive.rla-replayed"));

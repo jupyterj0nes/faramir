@@ -21,7 +21,7 @@ fn builder_hive_is_parsed_by_nt_hive2() {
     let mut b = HiveBuilder::software();
     b.sz(r"Microsoft\Windows\CurrentVersion\Run", "Updater", r"C:\evil\updater.exe");
     let path = b.write(&dir.join("SOFTWARE"));
-    let hive = Hive::new(std::io::BufReader::new(File::open(&path).unwrap()), HiveParseMode::NormalWithBaseBlock).unwrap();
+    let hive = Hive::new(faramir::windows::hives::HiveSource::File(std::io::BufReader::new(File::open(&path).unwrap())), HiveParseMode::NormalWithBaseBlock).unwrap();
     let mut hive = hive.treat_hive_as_clean();
     assert!(hive.is_checksum_valid().unwrap());
     assert_eq!(find_sz(&mut hive, r"Microsoft\Windows\CurrentVersion\Run", "Updater").as_deref(), Some(r"C:\evil\updater.exe"));

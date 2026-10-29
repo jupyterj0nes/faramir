@@ -183,7 +183,7 @@ pub enum FaramirError {
     TxLogOpenFailed(String),
     /// Transaction log lacks the "regf" signature (3030)
     TxLogSignatureInvalid(String),
-    /// Transaction log uses the legacy (file type 1/2) format that cannot be replayed (3031)
+    /// Transaction log uses the legacy (file type 1/2, `DIRT`) format: replayed through the old-format path when it matches the hive (3031)
     TxLogLegacyFormat(String),
     /// Transaction log truncated: an entry claims more bytes than the file has (3032)
     TxLogTruncated(String),
@@ -971,7 +971,7 @@ impl fmt::Display for FaramirError {
             Self::TxLogNotFound(p) => write!(f, "Dirty hive but no .LOG1/.LOG2 could be located for: {}", p),
             Self::TxLogOpenFailed(p) => write!(f, "Transaction log cannot be opened: {}", p),
             Self::TxLogSignatureInvalid(p) => write!(f, "Transaction log lacks the 'regf' signature: {}", p),
-            Self::TxLogLegacyFormat(p) => write!(f, "Transaction log is in legacy (pre-8.1) format and cannot be replayed: {}", p),
+            Self::TxLogLegacyFormat(p) => write!(f, "Transaction log is in the legacy (pre-8.1, DIRT) format: {}", p),
             Self::TxLogTruncated(p) => write!(f, "Transaction log truncated: {}", p),
             Self::TxLogEntryInvalid(p) => write!(f, "Transaction log entry invalid: {}", p),
             Self::TxLogNoEntries(p) => write!(f, "Transaction log has no HvLE entries: {}", p),

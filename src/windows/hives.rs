@@ -11,12 +11,12 @@
 //! against it, so a renamed hive never loses detections.
 
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 
-use nt_hive2::transactionlog::TransactionLog;
-use nt_hive2::{CleanHive, ContainsHive, DirtyHive, Hive, HiveParseMode, Offset};
+use blockcarve::hive_logs::{self, LogFile};
+use nt_hive2::{CleanHive, DirtyHive, Hive, HiveParseMode, Offset};
 use walkdir::WalkDir;
 
 use super::diag;
@@ -578,7 +578,33 @@ pub fn discover_hives(root: &Path) -> Vec<HiveInfo> {
     hives
 }
 
-pub type HiveFile = Hive<BufReader<File>, CleanHive>;
+pub type HiveFile = Hive<HiveSource, CleanHive>;
+
+/// Bytes behind an opened hive: the file itself, or the in-memory copy a transaction log
+/// replay produced (the evidence file is never written).
+#[derive(Debug)]
+pub enum HiveSource {
+    File(BufReader<File>),
+    Replayed(Cursor<Vec<u8>>),
+}
+
+impl Read for HiveSource {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            HiveSource::File(r) => r.read(buf),
+            HiveSource::Replayed(r) => r.read(buf),
+        }
+    }
+}
+
+impl Seek for HiveSource {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        match self {
+            HiveSource::File(r) => r.seek(pos),
+            HiveSource::Replayed(r) => r.seek(pos),
+        }
+    }
+}
 
 /// What happened while opening a hive.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -598,10 +624,17 @@ pub struct OpenedHive {
 fn parse_hive_file(
     path: &Path,
     header: &HiveHeader,
-) -> Result<Hive<BufReader<File>, DirtyHive>, FaramirError> {
+) -> Result<Hive<HiveSource, DirtyHive>, FaramirError> {
+    let file = File::open(path).map_err(|e| FaramirError::HiveOpenFailed(format!("{}: {e}", path.display())))?;
+    parse_hive_source(path, header, HiveSource::File(BufReader::new(file)))
+}
+
+fn parse_hive_source(
+    path: &Path,
+    header: &HiveHeader,
+    reader: HiveSource,
+) -> Result<Hive<HiveSource, DirtyHive>, FaramirError> {
     let label = path.display().to_string();
-    let file = File::open(path).map_err(|e| FaramirError::HiveOpenFailed(format!("{label}: {e}")))?;
-    let reader = BufReader::new(file);
     let mode = if header.checksum_valid() {
         HiveParseMode::NormalWithBaseBlock
     } else {
@@ -617,49 +650,52 @@ fn parse_hive_file(
     }
 }
 
-/// Load the selected logs and apply them. Consumes `hive`; on failure the caller re-opens.
-fn apply_selection(
-    hive: Hive<BufReader<File>, DirtyHive>,
-    selection: &TxLogSelection,
-) -> Result<(HiveFile, Vec<PathBuf>), FaramirError> {
-    let mut loaded: Vec<(PathBuf, TransactionLog)> = Vec::new();
-    for cand in selection.usable() {
-        match txlog::load_transaction_log(cand) {
-            Ok(log) => loaded.push((cand.path.clone(), log)),
+/// Replays `logs` into the hive at `info.path` in memory with blockcarve's replayer (the one
+/// caarea and masstin use) and opens the result. New-format logs are cut to their validated
+/// prefix first; old-format (`DIRT`) logs are applied when their timestamp matches the hive.
+fn apply_logs(info: &HiveInfo, logs: &[(PathBuf, Option<(u64, usize)>)]) -> Result<(HiveFile, Vec<PathBuf>), FaramirError> {
+    let label = info.path.display().to_string();
+    let raw = std::fs::read(&info.path).map_err(|e| FaramirError::HiveOpenFailed(format!("{label}: {e}")))?;
+    let mut files = Vec::new();
+    for (path, usable_len) in logs {
+        match std::fs::read(path) {
+            Ok(mut data) => {
+                if let Some((cut, valid_entries)) = usable_len {
+                    let cut = (*cut as usize).min(data.len());
+                    diag::record(FaramirError::TxLogPartiallyApplied(format!(
+                        "{}: using first {cut} of {} bytes ({valid_entries} valid entries)",
+                        path.display(),
+                        data.len()
+                    )));
+                    data.truncate(cut);
+                }
+                files.push(LogFile { path: path.clone(), data });
+            }
             Err(e) => {
-                diag::record(e);
+                diag::record(FaramirError::TxLogOpenFailed(format!("{}: {e}", path.display())));
             }
         }
     }
-    if loaded.is_empty() {
-        return Err(FaramirError::TxLogApplyFailed(
-            "no transaction log could be loaded".to_string(),
-        ));
+    if files.is_empty() {
+        return Err(FaramirError::TxLogApplyFailed("no transaction log could be loaded".to_string()));
     }
-    let used: Vec<PathBuf> = loaded.iter().map(|(p, _)| p.clone()).collect();
-    let mut iter = loaded.into_iter();
-    let (_, first) = iter.next().expect("non-empty");
-    let second = iter.next().map(|(_, l)| l);
-
-    let result = catch_unwind(AssertUnwindSafe(move || -> Result<HiveFile, FaramirError> {
-        let with_first = hive
-            .with_transaction_log(first)
-            .map_err(|e| FaramirError::TxLogApplyFailed(e.to_string()))?;
-        match second {
-            Some(l2) => {
-                let with_both = with_first
-                    .with_transaction_log(l2)
-                    .map_err(|e| FaramirError::TxLogApplyFailed(e.to_string()))?;
-                Ok(with_both.apply_logs())
+    let replay = hive_logs::replay(&raw, &files);
+    for (path, why) in &replay.skipped_old {
+        diag::record(FaramirError::TxLogSequenceMismatch(format!("{}: old-format log not applied ({why})", path.display())));
+    }
+    let used = match &replay.outcome {
+        hive_logs::Outcome::NewFormat { gap, rejected, .. } => {
+            if *gap || *rejected > 0 {
+                diag::record(FaramirError::TxLogPartiallyApplied(format!("{label}: {:?}", replay.outcome)));
             }
-            None => Ok(with_first.apply_logs()),
+            files.iter().map(|f| f.path.clone()).collect()
         }
-    }));
-    match result {
-        Ok(Ok(h)) => Ok((h, used)),
-        Ok(Err(e)) => Err(e),
-        Err(p) => Err(FaramirError::TxLogApplyPanic(diag::panic_message(&*p))),
-    }
+        hive_logs::Outcome::OldFormat { log, .. } => vec![log.clone()],
+        other => return Err(FaramirError::TxLogApplyFailed(format!("{label}: {other:?}"))),
+    };
+    let reader = HiveSource::Replayed(Cursor::new(replay.data.into_owned()));
+    let hive = parse_hive_source(&info.path, &info.header, reader)?;
+    Ok((hive.treat_hive_as_clean(), used))
 }
 
 /// Open a hive, replaying its transaction logs when it is dirty.
@@ -713,6 +749,24 @@ pub fn open_hive(info: &HiveInfo) -> Result<OpenedHive, FaramirError> {
     report.log1 = selection.log1.as_ref().map(|c| c.path.clone());
     report.log2 = selection.log2.as_ref().map(|c| c.path.clone());
 
+    let legacy: Vec<(PathBuf, Option<(u64, usize)>)> = selection
+        .rejected
+        .iter()
+        .filter(|(_, e)| matches!(e, FaramirError::TxLogLegacyFormat(_)))
+        .map(|(p, _)| (p.clone(), None))
+        .collect();
+    if selection.is_empty() && !legacy.is_empty() {
+        for (path, _) in &legacy {
+            out!("	    -> Applying {} (old format)", path.display());
+        }
+        match apply_logs(info, &legacy) {
+            Ok(replayed) => return finish_replay(info, header, Ok(replayed), report),
+            Err(e) => {
+                diag::record(e);
+            }
+        }
+    }
+
     if selection.is_empty() {
         if selection.rejected.is_empty() {
             diag::record(FaramirError::TxLogNotFound(label.clone()));
@@ -745,7 +799,27 @@ pub fn open_hive(info: &HiveInfo) -> Result<OpenedHive, FaramirError> {
         out!("\t    -> Applying {}", cand.path.display());
     }
 
-    match apply_selection(hive, &selection) {
+    drop(hive);
+    let usable: Vec<(PathBuf, Option<(u64, usize)>)> = selection
+        .usable()
+        .into_iter()
+        .map(|c| {
+            let cut = c.summary.as_ref().filter(|s| s.needs_sanitizing()).map(|s| (s.usable_len, s.entries.len()));
+            (c.path.clone(), cut)
+        })
+        .collect();
+    finish_replay(info, header, apply_logs(info, &usable), report)
+}
+
+/// Records how a replay went; on failure the hive is reopened in its dirty on-disk state.
+fn finish_replay(
+    info: &HiveInfo,
+    header: &HiveHeader,
+    result: Result<(HiveFile, Vec<PathBuf>), FaramirError>,
+    mut report: RecoveryReport,
+) -> Result<OpenedHive, FaramirError> {
+    let label = info.path.display().to_string();
+    match result {
         Ok((clean, used)) => {
             report.logs_applied = true;
             diag::record(FaramirError::HiveRecovered(format!(
