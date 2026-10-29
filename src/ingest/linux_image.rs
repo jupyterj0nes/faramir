@@ -7,11 +7,11 @@
 //! pointer, logical volumes read in place instead of dumped to a temp file,
 //! and XFS, btrfs and LUKS volumes reported rather than passed over quietly.
 
-use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 use std::collections::HashSet;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+
 
 use ext4_view::{Ext4, Ext4Read};
 
@@ -41,30 +41,32 @@ pub const MAX_FILES: usize = 50_000;
 /// the same image without copying it. Every call seeks explicitly, so the
 /// shared position never leaks between users.
 pub struct SharedReader<R> {
-    inner: Rc<RefCell<R>>,
+    inner: Arc<Mutex<R>>,
+    len: u64,
     offset: u64,
     pos: u64,
 }
 
 impl<R> Clone for SharedReader<R> {
     fn clone(&self) -> Self {
-        SharedReader { inner: Rc::clone(&self.inner), offset: self.offset, pos: 0 }
+        SharedReader { inner: Arc::clone(&self.inner), offset: self.offset, len: self.len, pos: 0 }
     }
 }
 
 impl<R: Read + Seek> SharedReader<R> {
-    pub fn new(reader: R) -> Self {
-        SharedReader { inner: Rc::new(RefCell::new(reader)), offset: 0, pos: 0 }
+    pub fn new(mut reader: R) -> Self {
+        let len = reader.seek(SeekFrom::End(0)).unwrap_or(0);
+        SharedReader { inner: Arc::new(Mutex::new(reader)), offset: 0, len, pos: 0 }
     }
 
     /// A view starting `offset` bytes further in (a partition, a physical volume).
     pub fn at(&self, offset: u64) -> Self {
-        SharedReader { inner: Rc::clone(&self.inner), offset: self.offset + offset, pos: 0 }
+        SharedReader { inner: Arc::clone(&self.inner), offset: self.offset + offset, len: self.len.saturating_sub(offset), pos: 0 }
     }
 
     /// Absolute read, independent of the cursor.
     pub fn read_at(&self, start: u64, dst: &mut [u8]) -> io::Result<()> {
-        let mut r = self.inner.borrow_mut();
+        let mut r = self.inner.lock().map_err(|_| io::Error::other("reader lock poisoned"))?;
         r.seek(SeekFrom::Start(self.offset + start))?;
         r.read_exact(dst)
     }
@@ -72,7 +74,7 @@ impl<R: Read + Seek> SharedReader<R> {
 
 impl<R: Read + Seek> Read for SharedReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let mut r = self.inner.borrow_mut();
+        let mut r = self.inner.lock().map_err(|_| io::Error::other("reader lock poisoned"))?;
         r.seek(SeekFrom::Start(self.offset + self.pos))?;
         let n = r.read(buf)?;
         self.pos += n as u64;
@@ -86,11 +88,23 @@ impl<R: Read + Seek> Seek for SharedReader<R> {
             SeekFrom::Start(p) => p,
             SeekFrom::Current(d) => self.pos.checked_add_signed(d).ok_or_else(|| io::Error::other("seek before start"))?,
             SeekFrom::End(d) => {
-                let end = self.inner.borrow_mut().seek(SeekFrom::End(0))?;
+                let end = self.inner.lock().map_err(|_| io::Error::other("reader lock poisoned"))?.seek(SeekFrom::End(0))?;
                 end.saturating_sub(self.offset).checked_add_signed(d).ok_or_else(|| io::Error::other("seek before start"))?
             }
         };
         Ok(self.pos)
+    }
+}
+
+/// The XFS driver wants a block device that answers positioned reads from a
+/// shared reference; the mutex inside makes that the same call.
+impl<R: Read + Seek + Send + 'static> fs_core::BlockRead for SharedReader<R> {
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> fs_core::Result<()> {
+        SharedReader::read_at(self, offset, buf).map_err(fs_core::Error::Io)
+    }
+
+    fn size_bytes(&self) -> u64 {
+        self.len
     }
 }
 
@@ -136,12 +150,12 @@ impl VolumeKind {
 
     /// Linux file systems Faramir reads today.
     pub fn is_readable_linux(&self) -> bool {
-        matches!(self, VolumeKind::Ext)
+        matches!(self, VolumeKind::Ext | VolumeKind::Xfs)
     }
 
     /// Linux volumes recognised but not read (reported, never silent).
     pub fn is_unsupported_linux(&self) -> bool {
-        matches!(self, VolumeKind::Xfs | VolumeKind::Btrfs | VolumeKind::F2fs)
+        matches!(self, VolumeKind::Btrfs | VolumeKind::F2fs)
     }
 }
 
@@ -495,7 +509,7 @@ pub fn extract_from_fs(fs: &Ext4, out_dir: &Path, label: &str) -> Result<Extract
 /// shared image. Striped, mirrored and thin layouts fail at seek time and
 /// are reported by the caller.
 struct LvReader<R: Read + Seek> {
-    lvm: Rc<lvm2::Lvm2>,
+    lvm: Arc<lvm2::Lvm2>,
     name: String,
     pv: SharedReader<R>,
 }
@@ -520,10 +534,10 @@ pub struct LogicalVolume {
 }
 
 /// Open the LVM physical volume at `offset` and describe its logical volumes.
-pub fn list_logical_volumes<R: Read + Seek + 'static>(reader: &SharedReader<R>, offset: u64, label: &str) -> Result<(Rc<lvm2::Lvm2>, Vec<LogicalVolume>), FaramirError> {
+pub fn list_logical_volumes<R: Read + Seek + 'static>(reader: &SharedReader<R>, offset: u64, label: &str) -> Result<(Arc<lvm2::Lvm2>, Vec<LogicalVolume>), FaramirError> {
     let pv = reader.at(offset);
     let lvm = lvm2::Lvm2::open(pv.clone()).map_err(|e| FaramirError::LvmParseError(format!("{label}: {e:?}")))?;
-    let lvm = Rc::new(lvm);
+    let lvm = Arc::new(lvm);
     let mut out = Vec::new();
     for lv in lvm.lvs() {
         let size = lv.size_in_extents() * lvm.extent_size();
@@ -550,8 +564,30 @@ pub fn list_logical_volumes<R: Read + Seek + 'static>(reader: &SharedReader<R>, 
     Ok((lvm, out))
 }
 
+impl<R: Read + Seek + Send + 'static> fs_core::BlockRead for LvReader<R> {
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> fs_core::Result<()> {
+        let mut lv = self.lvm.open_lv_by_name(&self.name, self.pv.clone()).ok_or_else(|| fs_core::Error::Io(io::Error::other(format!("LV {} vanished", self.name))))?;
+        lv.seek(SeekFrom::Start(offset)).map_err(fs_core::Error::Io)?;
+        lv.read_exact(buf).map_err(fs_core::Error::Io)
+    }
+
+    fn size_bytes(&self) -> u64 {
+        self.lvm.lvs().find(|l| l.name() == self.name).map(|l| l.size_in_extents() * self.lvm.extent_size()).unwrap_or(0)
+    }
+}
+
+/// A logical volume as a block device, for the XFS driver.
+pub fn lv_block_device<R: Read + Seek + Send + 'static>(reader: &SharedReader<R>, offset: u64, lvm: Arc<lvm2::Lvm2>, lv: &LogicalVolume) -> Arc<dyn fs_core::BlockRead> {
+    Arc::new(LvReader { lvm, name: lv.name.clone(), pv: reader.at(offset) })
+}
+
+/// A positioned reader over a logical volume, for the journal recovery.
+pub fn lv_ext4_reader<R: Read + Seek + 'static>(reader: &SharedReader<R>, offset: u64, lvm: Arc<lvm2::Lvm2>, lv: &LogicalVolume) -> Box<dyn Ext4Read> {
+    Box::new(LvReader { lvm, name: lv.name.clone(), pv: reader.at(offset) })
+}
+
 /// Copy the persistence surface of an ext logical volume.
-pub fn extract_from_lv<R: Read + Seek + 'static>(reader: &SharedReader<R>, offset: u64, lvm: Rc<lvm2::Lvm2>, lv: &LogicalVolume, out_dir: &Path, label: &str) -> Result<Extracted, FaramirError> {
+pub fn extract_from_lv<R: Read + Seek + 'static>(reader: &SharedReader<R>, offset: u64, lvm: Arc<lvm2::Lvm2>, lv: &LogicalVolume, out_dir: &Path, label: &str) -> Result<Extracted, FaramirError> {
     let src = LvReader { lvm, name: lv.name.clone(), pv: reader.at(offset) };
     let fs = Ext4::load(Box::new(src)).map_err(|e| {
         let text = e.to_string();

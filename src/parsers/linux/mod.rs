@@ -136,6 +136,71 @@ pub fn dedupe_events(events: Vec<Event>) -> Vec<Event> {
     out
 }
 
+/// Events for what the ext4 journal gave back (`<volume>.recovered`, see
+/// `ingest::ext_journal`): each recovered file goes through the same parsers
+/// as a live one, its artifact gets a `linux:deleted:` or
+/// `linux:previous_version:` prefix and its command line carries the
+/// deletion time and the journal transaction. A deleted file whose content
+/// is gone still yields one `linux:deleted:file` row with its name.
+pub fn process_recovered(dir: &Path, computer_name: &str) -> Vec<Event> {
+    use crate::ingest::ext_journal::read_manifest;
+    let Some(entries) = read_manifest(dir) else { return Vec::new() };
+    let mut out = Vec::new();
+    for e in entries {
+        let prefix = if e.kind == "previous_version" { "linux:previous_version:" } else { "linux:deleted:" };
+        let note = match (&e.dtime, e.kind.as_str()) {
+            (Some(d), "deleted") => format!("[deleted {d}, {}]", e.source),
+            (None, "deleted") => format!("[deleted, {}]", e.source),
+            _ => format!("[previous version written {}, {}]", e.mtime, e.source),
+        };
+        let staged = e.staged.as_ref().map(|s| dir.join(s)).filter(|p| p.is_file());
+        let mut events = match &staged {
+            Some(p) => {
+                let root = crate::ingest::ext_journal::staged_root(dir, e.staged.as_deref().unwrap_or(""));
+                EVIDENCE_ROOT.with(|r| *r.borrow_mut() = Some(root));
+                let mut ev = Vec::new();
+                process_single_file(p, computer_name, &mut ev);
+                EVIDENCE_ROOT.with(|r| *r.borrow_mut() = None);
+                ev
+            }
+            None => Vec::new(),
+        };
+        if events.is_empty() {
+            // nothing parseable (content reused, or a file the parsers do not read): the name alone is evidence
+            events.push(Event {
+                timestamp: e.dtime.clone().unwrap_or_else(|| e.mtime.clone()),
+                computer: computer_name.to_string(),
+                artifact: format!("{prefix}file"),
+                event_id: 0,
+                pid: 0,
+                subject_username: "unknown".into(),
+                target_username: "unknown".into(),
+                processname: Path::new(&e.path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+                commandline: Some(format!(
+                    "{} ({} bytes{}) {note}",
+                    e.path,
+                    e.size,
+                    if e.content_recovered { "" } else if e.blocks_reused { ", content blocks reused" } else { ", content not recovered" }
+                )),
+                parentprocessname: "ext4 journal".into(),
+            });
+        } else {
+            for ev in &mut events {
+                ev.artifact = format!("{prefix}{}", ev.artifact.trim_start_matches("linux:"));
+                let base = ev.commandline.take().unwrap_or_default();
+                ev.commandline = Some(format!("{base} {note} {}", e.path));
+                if let Some(d) = &e.dtime {
+                    if e.kind == "deleted" {
+                        ev.timestamp = d.clone();
+                    }
+                }
+            }
+        }
+        out.extend(events);
+    }
+    dedupe_events(out)
+}
+
 /// Recursively scans and extracts Linux persistence events from target directory or file
 pub fn process_linux_target(target: &Path, computer_name: &str) -> Vec<Event> {
     let mut events = Vec::new();

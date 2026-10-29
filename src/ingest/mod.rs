@@ -1,9 +1,11 @@
 pub mod archive;
+pub mod ext_journal;
 pub mod image;
 pub mod linux_image;
 pub mod triage;
 pub mod vhd;
 pub mod vmdk;
+pub mod xfs_image;
 
 use chrono::Local;
 use indicatif::{ProgressBar, ProgressStyle};

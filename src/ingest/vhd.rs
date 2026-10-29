@@ -356,8 +356,8 @@ impl Seek for VhdxReader {
     }
 }
 
-pub trait ReadSeek: Read + Seek {}
-impl<T: Read + Seek> ReadSeek for T {}
+pub trait ReadSeek: Read + Seek + Send {}
+impl<T: Read + Seek + Send> ReadSeek for T {}
 
 /// Open a `.vhd` or `.vhdx` by extension as a boxed `Read + Seek` with its virtual size.
 pub fn open_virtual_disk(path: &str) -> Result<(Box<dyn ReadSeek>, u64), String> {

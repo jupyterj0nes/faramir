@@ -111,6 +111,16 @@ pub enum FaramirError {
     LinuxExtractError(String),
     /// Linux volume found and its persistence surface staged (2037)
     LinuxVolumeExtracted(String),
+    /// ext4 metadata or jbd2 journal could not be parsed for recovery (2038)
+    ExtJournalParseError(String),
+    /// The journal held no block copies worth anything (empty, wiped, external) (2039)
+    ExtJournalEmpty(String),
+    /// A deleted file or a previous version was recovered from an ext volume (2040)
+    ExtDeletedRecovered(String),
+    /// A deleted file was named but its blocks are reused; no content (2041)
+    ExtDeletedContentReused(String),
+    /// XFS volume could not be mounted or walked (2042)
+    XfsParseError(String),
 
     // ─── 3000..3999: Windows Registry & Persistence ─────────────────────────
     /// Failed to open registry hive (3001)
@@ -321,6 +331,11 @@ impl FaramirError {
             Self::LuksEncrypted(_) => "ERR_ING_LUKS_ENCRYPTED",
             Self::LinuxExtractError(_) => "ERR_ING_LINUX_EXTRACT",
             Self::LinuxVolumeExtracted(_) => "ERR_ING_LINUX_VOLUME_EXTRACTED",
+            Self::ExtJournalParseError(_) => "ERR_ING_EXT_JOURNAL_PARSE",
+            Self::ExtJournalEmpty(_) => "ERR_ING_EXT_JOURNAL_EMPTY",
+            Self::ExtDeletedRecovered(_) => "ERR_ING_EXT_DELETED_RECOVERED",
+            Self::ExtDeletedContentReused(_) => "ERR_ING_EXT_DELETED_CONTENT_REUSED",
+            Self::XfsParseError(_) => "ERR_ING_XFS_PARSE",
 
             Self::HiveOpenFailed(_) => "ERR_WIN_HIVE_OPEN",
             Self::HiveCorrupt(_) => "ERR_WIN_HIVE_CORRUPT",
@@ -450,6 +465,11 @@ impl FaramirError {
             Self::LuksEncrypted(_) => 2035,
             Self::LinuxExtractError(_) => 2036,
             Self::LinuxVolumeExtracted(_) => 2037,
+            Self::ExtJournalParseError(_) => 2038,
+            Self::ExtJournalEmpty(_) => 2039,
+            Self::ExtDeletedRecovered(_) => 2040,
+            Self::ExtDeletedContentReused(_) => 2041,
+            Self::XfsParseError(_) => 2042,
 
             Self::HiveOpenFailed(_) => 3001,
             Self::HiveCorrupt(_) => 3002,
@@ -564,6 +584,8 @@ impl FaramirError {
             | Self::LinuxFsUnsupported(_)
             | Self::LuksEncrypted(_)
             | Self::LinuxExtractError(_)
+            | Self::ExtJournalParseError(_)
+            | Self::ExtDeletedContentReused(_)
             | Self::ValueEmpty(_) => Severity::Warning,
 
             Self::HiveCompanionSkipped(_)
@@ -574,6 +596,8 @@ impl FaramirError {
             | Self::CarveMatchesExtracted(_)
             | Self::CarveHiveRecovered(_)
             | Self::LinuxVolumeExtracted(_)
+            | Self::ExtJournalEmpty(_)
+            | Self::ExtDeletedRecovered(_)
             | Self::LinuxDuplicateSkipped(_)
             | Self::TxLogHiveMismatch(_)
             | Self::TechniqueNoApplicableHive(_)
@@ -641,6 +665,11 @@ impl FaramirError {
             | Self::LuksEncrypted(s)
             | Self::LinuxExtractError(s)
             | Self::LinuxVolumeExtracted(s)
+            | Self::ExtJournalParseError(s)
+            | Self::ExtJournalEmpty(s)
+            | Self::ExtDeletedRecovered(s)
+            | Self::ExtDeletedContentReused(s)
+            | Self::XfsParseError(s)
             | Self::HiveOpenFailed(s)
             | Self::HiveCorrupt(s)
             | Self::HiveDirtyNoLogs(s)
@@ -767,6 +796,11 @@ impl FaramirError {
             Self::LuksEncrypted(e()),
             Self::LinuxExtractError(e()),
             Self::LinuxVolumeExtracted(e()),
+            Self::ExtJournalParseError(e()),
+            Self::ExtJournalEmpty(e()),
+            Self::ExtDeletedRecovered(e()),
+            Self::ExtDeletedContentReused(e()),
+            Self::XfsParseError(e()),
             Self::HiveOpenFailed(e()),
             Self::HiveCorrupt(e()),
             Self::HiveDirtyNoLogs(e()),
@@ -894,6 +928,11 @@ impl fmt::Display for FaramirError {
             Self::LuksEncrypted(e) => write!(f, "LUKS-encrypted volume skipped: {}", e),
             Self::LinuxExtractError(e) => write!(f, "Could not copy a file out of the Linux volume: {}", e),
             Self::LinuxVolumeExtracted(e) => write!(f, "Linux volume staged: {}", e),
+            Self::ExtJournalParseError(e) => write!(f, "ext4 journal recovery not possible: {}", e),
+            Self::ExtJournalEmpty(e) => write!(f, "ext4 journal held nothing to recover: {}", e),
+            Self::ExtDeletedRecovered(e) => write!(f, "Recovered from ext4 journal: {}", e),
+            Self::ExtDeletedContentReused(e) => write!(f, "Deleted file named but its blocks are reused, no content: {}", e),
+            Self::XfsParseError(e) => write!(f, "Cannot read XFS volume: {}", e),
 
             Self::HiveOpenFailed(p) => write!(f, "Failed to open hive: {}", p),
             Self::HiveCorrupt(p) => write!(f, "Registry hive is corrupt: {}", p),

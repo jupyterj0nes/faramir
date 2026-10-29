@@ -39,8 +39,8 @@ fn truth(tag: &str) -> Vec<(String, String)> {
 
 /// Techniques the planted canary is expected to surface as a row.
 fn expected_in_rows(k: &str) -> bool {
-    // deleted_cron only exists in unallocated space: Linux carving is not there yet
-    k != "deleted_cron" && k != "hostname" && k != "key"
+    // deleted_* and previous_* come back through the ext4 journal (tests/test_ext_journal.rs)
+    !k.starts_with("deleted_") && k != "previous_crontab" && k != "inplace_sudo" && k != "hostname" && k != "key"
 }
 
 fn run_image(d: &TempDir, name: &str) -> (PathBuf, Vec<faramir::event::Event>, String) {
@@ -67,8 +67,8 @@ fn check_canaries(tag: &str, events: &[faramir::event::Event], host: &str) {
         let hit = events.iter().any(|e| e.commandline.as_deref().unwrap_or("").contains(&v) || e.processname.contains(&v));
         if expected_in_rows(&k) {
             assert!(hit, "{tag}: canary {k} ({v}) missing from {} events", events.len());
-        } else if k == "deleted_cron" {
-            assert!(!hit, "{tag}: a deleted cron entry can only come back through carving");
+        } else if k.starts_with("deleted_") || k == "previous_crontab" || k == "inplace_sudo" {
+            assert!(!hit, "{tag}: {k} is not in the live tree; it comes back through the journal");
         } else if k == "key" {
             assert!(events.iter().any(|e| e.artifact == "linux:ssh:authorized_key" && e.commandline.as_deref().unwrap_or("").contains(&v)), "{tag}: key {v}");
         }
@@ -145,7 +145,7 @@ fn image_through_the_cli() {
     let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(1).map(String::from).collect();
     assert!(rows.len() >= 12, "{rows:?}");
     assert!(rows.iter().all(|r| r.contains("\"lab-lvm\"")), "{rows:?}");
-    assert!(rows.iter().any(|r| r.contains("linux:sudoers:nopasswd") && r.contains("/opt/lab/lvm/sudo.sh")), "{rows:?}");
+    assert!(rows.iter().any(|r| r.contains("linux:sudoers:nopasswd") && r.contains("/opt/lab/lvm/sudo_v2.sh")), "{rows:?}");
 }
 
 #[test]
@@ -196,8 +196,8 @@ fn sniff_recognises_every_kind() {
 #[test]
 fn volume_kind_labels_and_classes() {
     assert!(VolumeKind::Ext.is_readable_linux());
-    assert!(!VolumeKind::Xfs.is_readable_linux());
-    assert!(VolumeKind::Xfs.is_unsupported_linux() && VolumeKind::Btrfs.is_unsupported_linux() && VolumeKind::F2fs.is_unsupported_linux());
+    assert!(VolumeKind::Xfs.is_readable_linux());
+    assert!(!VolumeKind::Xfs.is_unsupported_linux() && VolumeKind::Btrfs.is_unsupported_linux() && VolumeKind::F2fs.is_unsupported_linux());
     assert!(!VolumeKind::Ntfs.is_unsupported_linux() && !VolumeKind::Lvm.is_unsupported_linux());
     for k in [VolumeKind::Ntfs, VolumeKind::Ext, VolumeKind::Lvm, VolumeKind::Luks, VolumeKind::Unknown] {
         assert!(!k.label().is_empty());
@@ -275,14 +275,14 @@ fn unsupported_and_encrypted_volumes_are_reported_not_ignored() {
     let d = TempDir::new("lnxdisk_unsupported");
     let mut img = mbr_image(&[(0x83, 2048, 2048), (0x83, 4096, 2048)], 8192 * 512);
     let p1 = 2048 * 512;
-    img[p1..p1 + 4].copy_from_slice(b"XFSB");
+    img[p1 + 0x10040..p1 + 0x10048].copy_from_slice(b"_BHRfS_M");
     let p2 = 4096 * 512;
     img[p2..p2 + 6].copy_from_slice(b"LUKS\xba\xbe");
     let path = d.write("mixed.raw", &img);
     diag::clear();
     let err = unpack_disk_image(&path, &d.mkdir("stg"), true).expect_err("nothing readable");
     let text = err.to_string();
-    assert!(text.contains("found: XFS") && text.contains("LUKS"), "{text}");
+    assert!(text.contains("found: btrfs") && text.contains("LUKS"), "{text}");
     assert_eq!(diag::count("ERR_ING_LINUX_FS_UNSUPPORTED"), 1);
     assert_eq!(diag::count("ERR_ING_LUKS_ENCRYPTED"), 1);
 }

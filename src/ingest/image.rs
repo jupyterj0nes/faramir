@@ -647,11 +647,79 @@ pub fn unpack_disk_image(
     Ok(out_dir)
 }
 
+/// Suffix of the folder holding what the ext4 journal gave back for a volume.
+pub const RECOVERED_SUFFIX: &str = ".recovered";
+
+/// Deleted files and previous versions from an ext volume's journal, staged
+/// next to the volume as `<dir>.recovered`. Returns the number of files written.
+fn recover_from_volume(reader: &mut dyn ext4_view::Ext4Read, out_dir: &Path, dir: &str, label: &str, silent: bool) -> usize {
+    use super::ext_journal as ej;
+    let report = match ej::recover(reader, label) {
+        Ok(r) => r,
+        Err(e) => {
+            crate::windows::diag::record(e);
+            return 0;
+        }
+    };
+    let j = report.journal.as_ref();
+    if report.files.is_empty() {
+        crate::windows::diag::record(crate::errors::FaramirError::ExtJournalEmpty(format!(
+            "{label}: {} block copies in {} descriptor(s), {} inode-table and {} directory copies, nothing under the persistence surface",
+            j.map(|j| j.copies).unwrap_or(0),
+            j.map(|j| j.descriptors).unwrap_or(0),
+            report.inode_copies,
+            report.dir_copies
+        )));
+        return 0;
+    }
+    let target = out_dir.join(format!("{dir}{RECOVERED_SUFFIX}"));
+    let entries = match ej::stage(&report, &target, label) {
+        Ok(e) => e,
+        Err(e) => {
+            crate::windows::diag::record(e);
+            return 0;
+        }
+    };
+    let mut written = 0usize;
+    for e in &entries {
+        if e.content_recovered {
+            written += 1;
+            crate::windows::diag::record(crate::errors::FaramirError::ExtDeletedRecovered(format!(
+                "{label}: {} {} ({} bytes, {}, mtime {}{})",
+                e.kind,
+                e.path,
+                e.size,
+                e.source,
+                e.mtime,
+                e.dtime.as_deref().map(|d| format!(", deleted {d}")).unwrap_or_default()
+            )));
+        } else {
+            crate::windows::diag::record(crate::errors::FaramirError::ExtDeletedContentReused(format!(
+                "{label}: {} {} ({}{})",
+                e.kind,
+                e.path,
+                e.source,
+                e.dtime.as_deref().map(|d| format!(", deleted {d}")).unwrap_or_default()
+            )));
+        }
+    }
+    log_message(
+        silent,
+        &format!(
+            "  │    journal: {} deleted file(s) and {} previous version(s) under the persistence surface, {} with content",
+            entries.iter().filter(|e| e.kind == "deleted").count(),
+            entries.iter().filter(|e| e.kind == "previous_version").count(),
+            written
+        ),
+    );
+    written
+}
+
 /// Processes a seekable disk image: locates partitions, extracts Windows
 /// artifacts and Volume Shadow Copies from NTFS volumes, the persistence
 /// surface from Linux volumes (ext2/3/4, plain or in LVM), and reports every
 /// other volume kind it recognises.
-fn process_seekable_image<R: Read + Seek + 'static>(
+fn process_seekable_image<R: Read + Seek + Send + 'static>(
     reader: R,
     image_size: u64,
     out_dir: &Path,
@@ -682,7 +750,7 @@ fn process_seekable_image<R: Read + Seek + 'static>(
     if partitions.is_empty() && linux.is_empty() {
         let seen: Vec<String> = volumes.iter().map(|v| format!("{} at {:#x}", v.kind.label(), v.offset)).collect();
         return Err(format!(
-            "No NTFS or Linux (ext2/3/4, LVM) partitions found in disk image{}",
+            "No NTFS or Linux (ext2/3/4, XFS, LVM) partitions found in disk image{}",
             if seen.is_empty() { " (no partition table, no known file system at offset 0)".to_string() } else { format!("; found: {}", seen.join(", ")) }
         )
         .into());
@@ -739,6 +807,22 @@ fn process_seekable_image<R: Read + Seek + 'static>(
                         total_extracted += x.files;
                         log_message(silent, &format!("  ├─ Partition {}: ext4, host '{}', {} file(s) staged", part_idx + 1, x.hostname.as_deref().unwrap_or("?"), x.files));
                         crate::windows::diag::record(crate::errors::FaramirError::LinuxVolumeExtracted(format!("{label}: {} file(s) into {dir}", x.files)));
+                        let mut r = shared.at(v.offset);
+                        total_extracted += recover_from_volume(&mut r, out_dir, &dir, &label, silent);
+                    }
+                    Err(e) => {
+                        crate::windows::diag::record(e);
+                    }
+                }
+            }
+            VolumeKind::Xfs => {
+                let dir = lx::linux_dir_name(part_idx, None);
+                let device: std::sync::Arc<dyn fs_core::BlockRead> = std::sync::Arc::new(shared.at(v.offset));
+                match super::xfs_image::extract_from_xfs(device, &out_dir.join(&dir), &label) {
+                    Ok(x) => {
+                        total_extracted += x.files;
+                        log_message(silent, &format!("  ├─ Partition {}: XFS, host '{}', {} file(s) staged", part_idx + 1, x.hostname.as_deref().unwrap_or("?"), x.files));
+                        crate::windows::diag::record(crate::errors::FaramirError::LinuxVolumeExtracted(format!("{label}: {} file(s) into {dir}", x.files)));
                     }
                     Err(e) => {
                         crate::windows::diag::record(e);
@@ -753,11 +837,13 @@ fn process_seekable_image<R: Read + Seek + 'static>(
                         match lv.kind {
                             VolumeKind::Ext => {
                                 let dir = lx::linux_dir_name(part_idx, Some(lv));
-                                match lx::extract_from_lv(&shared, v.offset, std::rc::Rc::clone(&lvm), lv, &out_dir.join(&dir), &lv_label) {
+                                match lx::extract_from_lv(&shared, v.offset, std::sync::Arc::clone(&lvm), lv, &out_dir.join(&dir), &lv_label) {
                                     Ok(x) => {
                                         total_extracted += x.files;
                                         log_message(silent, &format!("  │    LV {}/{}: ext4, host '{}', {} file(s) staged", lv.vg, lv.name, x.hostname.as_deref().unwrap_or("?"), x.files));
                                         crate::windows::diag::record(crate::errors::FaramirError::LinuxVolumeExtracted(format!("{lv_label}: {} file(s) into {dir}", x.files)));
+                                        let mut r = lx::lv_ext4_reader(&shared, v.offset, std::sync::Arc::clone(&lvm), lv);
+                                        total_extracted += recover_from_volume(&mut *r, out_dir, &dir, &lv_label, silent);
                                     }
                                     Err(e) => {
                                         crate::windows::diag::record(e);
@@ -765,7 +851,18 @@ fn process_seekable_image<R: Read + Seek + 'static>(
                                 }
                             }
                             VolumeKind::Xfs => {
-                                crate::windows::diag::record(crate::errors::FaramirError::LinuxFsUnsupported(format!("{lv_label}: XFS ({} bytes)", lv.size)));
+                                let dir = lx::linux_dir_name(part_idx, Some(lv));
+                                let device = lx::lv_block_device(&shared, v.offset, std::sync::Arc::clone(&lvm), lv);
+                                match super::xfs_image::extract_from_xfs(device, &out_dir.join(&dir), &lv_label) {
+                                    Ok(x) => {
+                                        total_extracted += x.files;
+                                        log_message(silent, &format!("  │    LV {}/{}: XFS, host '{}', {} file(s) staged", lv.vg, lv.name, x.hostname.as_deref().unwrap_or("?"), x.files));
+                                        crate::windows::diag::record(crate::errors::FaramirError::LinuxVolumeExtracted(format!("{lv_label}: {} file(s) into {dir}", x.files)));
+                                    }
+                                    Err(e) => {
+                                        crate::windows::diag::record(e);
+                                    }
+                                }
                             }
                             _ => {
                                 crate::windows::diag::record(crate::errors::FaramirError::LinuxFsUnsupported(format!("{lv_label}: no ext2/3/4 or XFS signature ({} bytes, swap or data volume?)", lv.size)));

@@ -200,6 +200,14 @@ fn process_target_directory(
                     println!("🐧 Detected Linux volume [{}]: {}", host, vol.display());
                 }
                 all_events.extend(parsers::linux::process_linux_target(vol, &host));
+                let recovered = vol.with_file_name(format!("{}{}", vol.file_name().unwrap_or_default().to_string_lossy(), ingest::image::RECOVERED_SUFFIX));
+                if recovered.is_dir() {
+                    let ev = parsers::linux::process_recovered(&recovered, &host);
+                    if !silent && !ev.is_empty() {
+                        println!("🕰️  {} persistence item(s) recovered from the ext4 journal (deleted files, previous versions)", ev.len());
+                    }
+                    all_events.extend(ev);
+                }
             }
         }
         if *action == Action::GetLinuxPersistence {

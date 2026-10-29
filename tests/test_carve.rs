@@ -1109,7 +1109,7 @@ fn ingest_error_numbers_are_dense_up_to_the_carving_codes() {
     let mut nums: Vec<u32> = FaramirError::catalog().iter().map(|e| e.error_number()).filter(|n| (2000..3000).contains(n)).collect();
     nums.sort_unstable();
     nums.dedup();
-    assert_eq!(nums, (2001..=2037).collect::<Vec<_>>());
+    assert_eq!(nums, (2001..=2042).collect::<Vec<_>>());
 }
 
 // ─── the real binary ─────────────────────────────────────────────────────────

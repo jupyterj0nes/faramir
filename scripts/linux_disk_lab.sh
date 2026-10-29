@@ -21,7 +21,7 @@ set -u
 OUT="${1:-/tmp/faramir-disklab}"
 mkdir -p "$OUT"
 cd "$OUT" || exit 1
-rm -f gpt_ext4.img mbr_lvm_ext4.img real_ext4.img truth.txt sha256.txt
+rm -f gpt_ext4.img mbr_lvm_ext4.img gpt_xfs.img mbr_lvm_xfs.img real_ext4.img truth.txt sha256.txt
 MNT=/tmp/faramir-disklab-mnt
 mkdir -p "$MNT"
 : > truth.txt
@@ -53,14 +53,29 @@ populate() {  # populate <mountpoint> <tag>
     printf '/opt/lab/%s/profile_d.sh\n' "$tag" > "$m/etc/profile.d/lab.sh"
     printf 'ACTION=="add", SUBSYSTEM=="usb", RUN+="/opt/lab/%s/udev.sh"\n' "$tag" > "$m/etc/udev/rules.d/99-lab.rules"
     printf 'install lab_mod /opt/lab/%s/modprobe.sh\n' "$tag" > "$m/etc/modprobe.d/lab.conf"
-    # a file that is deleted again: nothing points to it afterwards
+    # files that are deleted again: nothing points to them afterwards
     printf '* * * * * root /opt/lab/%s/deleted_cron.sh\n' "$tag" > "$m/etc/cron.d/gone"
+    printf '[Unit]\nDescription=Gone\n[Service]\nExecStart=/opt/lab/%s/deleted_service.sh\n' "$tag" > "$m/etc/systemd/system/gone.service"
+    printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDeletedKeyForFaramirLab%s deleted-%s@faramir\n' "$tag" "$tag" > "$m/home/bob/.ssh/authorized_keys2"
     sync
-    rm -f "$m/etc/cron.d/gone"
+    rm -f "$m/etc/cron.d/gone" "$m/etc/systemd/system/gone.service" "$m/home/bob/.ssh/authorized_keys2"
     sync
-    for t in crontab cron_d spool service timer sudo pam bashrc root_profile preload akc profile_d udev modprobe deleted_cron; do
+    # a file replaced the way editors do it (write a new file, rename over): the old inode and its blocks are freed
+    printf 'SHELL=/bin/sh\n*/7 * * * * root /opt/lab/%s/crontab_v2.sh\n' "$tag" > "$m/etc/crontab.new"
+    mv -f "$m/etc/crontab.new" "$m/etc/crontab"
+    sync
+    # a file rewritten in place (truncate and write): whether the old blocks survive is up to the allocator
+    printf 'bob ALL=(ALL) NOPASSWD: /opt/lab/%s/sudo_v2.sh\n' "$tag" > "$m/etc/sudoers.d/lab"
+    sync
+    for t in cron_d spool service timer pam bashrc root_profile akc profile_d udev modprobe crontab_v2 sudo_v2; do
         echo "$tag $t /opt/lab/$tag/$t.sh" >> truth.txt
     done
+    echo "$tag preload /opt/lab/$tag/preload.so" >> truth.txt
+    echo "$tag deleted_cron /opt/lab/$tag/deleted_cron.sh" >> truth.txt
+    echo "$tag deleted_service /opt/lab/$tag/deleted_service.sh" >> truth.txt
+    echo "$tag deleted_key deleted-$tag@faramir" >> truth.txt
+    echo "$tag previous_crontab /opt/lab/$tag/crontab.sh" >> truth.txt
+    echo "$tag inplace_sudo /opt/lab/$tag/sudo.sh" >> truth.txt
     echo "$tag hostname lab-$tag" >> truth.txt
     echo "$tag key lab-$tag@faramir" >> truth.txt
 }
@@ -88,6 +103,34 @@ populate "$MNT" lvm
 umount "$MNT"
 vgchange -an vg_lab >/dev/null
 losetup -d "$L"   # the VG only existed through the loop device; the image keeps its metadata
+
+# --- 2b. GPT + XFS (v5, CRC) ---------------------------------------------------
+truncate -s 64M gpt_xfs.img
+sgdisk -Z -n 1:2048:0 -t 1:8300 -c 1:"lab xfs" gpt_xfs.img >/dev/null
+L=$(losetup --find --show -P gpt_xfs.img)
+mkfs.xfs -q -f -L labxfs "${L}p1"
+mount "${L}p1" "$MNT"
+populate "$MNT" xfs
+# a directory too big for the inode's short form, so the leaf/node code paths run
+mkdir -p "$MNT/usr/lib/systemd/system/noise.d"
+for i in $(seq 1 300); do echo "noise $i" > "$MNT/usr/lib/systemd/system/noise.d/noise_$i.txt"; done
+sync
+umount "$MNT"
+losetup -d "$L"
+
+# --- 2c. MBR + LVM + XFS (what RHEL and its relatives install by default) ------
+truncate -s 80M mbr_lvm_xfs.img
+parted -s mbr_lvm_xfs.img mklabel msdos mkpart primary 1MiB 100% set 1 lvm on
+L=$(losetup --find --show -P mbr_lvm_xfs.img)
+pvcreate -ff -y "${L}p1" >/dev/null
+vgcreate vg_xfs "${L}p1" >/dev/null
+lvcreate -y -L 64M -n root vg_xfs >/dev/null
+mkfs.xfs -q -f -L lvxfs /dev/vg_xfs/root
+mount /dev/vg_xfs/root "$MNT"
+populate "$MNT" lvmxfs
+umount "$MNT"
+vgchange -an vg_xfs >/dev/null
+losetup -d "$L"
 
 # --- 3. this host's real persistence surface on a plain ext4 volume -----------
 truncate -s 256M real_ext4.img
@@ -117,6 +160,6 @@ losetup -d "$L"
 echo "real hostname $(hostname -s | tr '[:upper:]' '[:lower:]')" >> truth.txt
 
 rmdir "$MNT" 2>/dev/null
-sha256sum gpt_ext4.img mbr_lvm_ext4.img real_ext4.img truth.txt > sha256.txt
+sha256sum gpt_ext4.img mbr_lvm_ext4.img gpt_xfs.img mbr_lvm_xfs.img real_ext4.img truth.txt > sha256.txt
 cat sha256.txt
 cat truth.txt
