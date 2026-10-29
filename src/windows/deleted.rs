@@ -8,7 +8,6 @@
 //! the ones that live under a persistence location, plus orphan deleted values
 //! whose data looks like a command line.
 
-use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Seek, SeekFrom};
 use std::path::Path;
 
@@ -18,12 +17,6 @@ use super::techniques::{HiveSet, KeyRoot, Persistence, Root, TechniqueId};
 use crate::errors::FaramirError;
 
 const HBIN_HEADER: usize = 32;
-const NK_FIXED: usize = 0x4c;
-const VK_FIXED: usize = 0x14;
-const MAX_VALUES_PER_KEY: u32 = 4096;
-const MAX_DATA_BYTES: usize = 64 * 1024;
-const MAX_NAME_BYTES: usize = 512;
-const MAX_CHAIN: usize = 128;
 
 /// Marker placed in [`Persistence::source`] for recovered findings.
 pub const SOURCE_DELETED: &str = "deleted";
@@ -46,6 +39,7 @@ pub struct RawValue {
     pub allocated: bool,
     pub name: String,
     pub data_type: u32,
+    /// Text of a `REG_SZ` / `REG_EXPAND_SZ` value.
     pub data: Option<String>,
 }
 
@@ -67,40 +61,30 @@ pub struct DeletedScan {
     pub orphan_values: Vec<RawValue>,
 }
 
-/// Bounds-checked view over a hive's bytes.
+fn key_from(k: blockcarve::hive_cells::RawKey) -> RawKey {
+    RawKey {
+        offset: k.offset,
+        allocated: k.allocated,
+        name: k.name,
+        parent: k.parent,
+        timestamp_filetime: k.timestamp_filetime,
+        values_count: k.values_count,
+        values_list: k.values_list,
+        is_root: k.is_root,
+    }
+}
+
+fn value_from(v: blockcarve::hive_cells::RawValue) -> RawValue {
+    use blockcarve::hive_cells::{REG_EXPAND_SZ, REG_SZ};
+    let data = if matches!(v.data_type, REG_SZ | REG_EXPAND_SZ) { v.text() } else { None };
+    RawValue { offset: v.offset, allocated: v.allocated, name: v.name, data_type: v.data_type, data }
+}
+
+/// Bounds-checked view over a hive's bytes. The cell walker is
+/// `blockcarve::hive_cells`, shared with caarea and masstin; this type keeps
+/// faramir's error codes and its pipeline entry point.
 pub struct HiveImage {
     bytes: Vec<u8>,
-    root_cell: u32,
-}
-
-fn u32_at(b: &[u8], off: usize) -> u32 {
-    u32::from_le_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
-}
-fn u16_at(b: &[u8], off: usize) -> u16 {
-    u16::from_le_bytes([b[off], b[off + 1]])
-}
-fn u64_at(b: &[u8], off: usize) -> u64 {
-    let mut a = [0u8; 8];
-    a.copy_from_slice(&b[off..off + 8]);
-    u64::from_le_bytes(a)
-}
-
-fn decode_name(raw: &[u8], ascii: bool) -> Option<String> {
-    let s = if ascii {
-        raw.iter().map(|&b| b as char).collect::<String>()
-    } else {
-        let units: Vec<u16> = raw.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
-        String::from_utf16(&units).ok()?
-    };
-    if s.is_empty() || s.chars().any(|c| c.is_control()) {
-        return None;
-    }
-    Some(s)
-}
-
-fn decode_utf16_string(raw: &[u8]) -> String {
-    let units: Vec<u16> = raw.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
-    String::from_utf16_lossy(&units)
 }
 
 impl HiveImage {
@@ -111,8 +95,7 @@ impl HiveImage {
         if &bytes[..4] != b"regf" {
             return Err(FaramirError::HiveSignatureInvalid("deleted-cell scan".into()));
         }
-        let root_cell = u32_at(&bytes, 0x24);
-        Ok(HiveImage { bytes, root_cell })
+        Ok(HiveImage { bytes })
     }
 
     /// Bytes of a hive opened through the normal pipeline (transaction logs applied).
@@ -129,13 +112,13 @@ impl HiveImage {
         Self::new(bytes)
     }
 
-    fn region(&self) -> &[u8] {
-        &self.bytes[BASE_BLOCK_SIZE..]
+    fn image(&self) -> blockcarve::hive_cells::HiveImage<'_> {
+        blockcarve::hive_cells::HiveImage::new(&self.bytes).expect("checked in HiveImage::new")
     }
 
     /// Cell at `off` (relative to the hive bins data): (allocated, payload after the size field).
     pub fn cell(&self, off: u32) -> Option<(bool, &[u8])> {
-        let r = self.region();
+        let r = &self.bytes[BASE_BLOCK_SIZE..];
         let o = off as usize;
         if o + 4 > r.len() || !o.is_multiple_of(8) {
             return None;
@@ -148,184 +131,20 @@ impl HiveImage {
         Some((raw < 0, &r[o + 4..o + size]))
     }
 
-    fn parse_nk(&self, off: u32) -> Option<RawKey> {
-        let (allocated, p) = self.cell(off)?;
-        if p.len() < NK_FIXED || &p[..2] != b"nk" {
-            return None;
-        }
-        let flags = u16_at(p, 2);
-        let name_len = u16_at(p, 0x48) as usize;
-        if name_len == 0 || name_len > MAX_NAME_BYTES || NK_FIXED + name_len > p.len() {
-            return None;
-        }
-        let name = decode_name(&p[NK_FIXED..NK_FIXED + name_len], flags & 0x20 != 0)?;
-        Some(RawKey {
-            offset: off,
-            allocated,
-            name,
-            parent: u32_at(p, 0x10),
-            timestamp_filetime: u64_at(p, 0x04),
-            values_count: u32_at(p, 0x24),
-            values_list: u32_at(p, 0x28),
-            is_root: flags & 0x04 != 0 || off == self.root_cell,
-        })
-    }
-
-    fn parse_vk(&self, off: u32) -> Option<RawValue> {
-        let (allocated, p) = self.cell(off)?;
-        if p.len() < VK_FIXED || &p[..2] != b"vk" {
-            return None;
-        }
-        let name_len = u16_at(p, 2) as usize;
-        let data_size = u32_at(p, 4);
-        let data_field = u32_at(p, 8);
-        let data_type = u32_at(p, 12);
-        let flags = u16_at(p, 16);
-        if name_len > MAX_NAME_BYTES || VK_FIXED + name_len > p.len() {
-            return None;
-        }
-        let name = if name_len == 0 {
-            "(Default)".to_string()
-        } else {
-            decode_name(&p[VK_FIXED..VK_FIXED + name_len], flags & 1 != 0)?
-        };
-        let data = self.string_data(data_size, data_field, data_type);
-        Some(RawValue { offset: off, allocated, name, data_type, data })
-    }
-
-    fn string_data(&self, data_size: u32, data_field: u32, data_type: u32) -> Option<String> {
-        if data_type != 1 && data_type != 2 {
-            return None;
-        }
-        let len = (data_size & 0x7fff_ffff) as usize;
-        if data_size & 0x8000_0000 != 0 {
-            let bytes = data_field.to_le_bytes();
-            return Some(decode_utf16_string(&bytes[..len.min(4)]));
-        }
-        if len == 0 || len > MAX_DATA_BYTES {
-            return None;
-        }
-        let (_, p) = self.cell(data_field)?;
-        if p.len() < len {
-            return None;
-        }
-        Some(decode_utf16_string(&p[..len]))
-    }
-
-    fn values_of(&self, key: &RawKey, referenced: &mut HashSet<u32>) -> Vec<RawValue> {
-        let count = key.values_count;
-        if count == 0 || count > MAX_VALUES_PER_KEY || key.values_list == 0xffff_ffff {
-            return Vec::new();
-        }
-        let Some((_, list)) = self.cell(key.values_list) else { return Vec::new() };
-        let mut out = Vec::new();
-        for i in 0..count as usize {
-            if (i + 1) * 4 > list.len() {
-                break;
-            }
-            let vk_off = u32_at(list, i * 4);
-            if let Some(v) = self.parse_vk(vk_off) {
-                referenced.insert(vk_off);
-                out.push(v);
-            }
-        }
-        out
-    }
-
     /// Walk every hive bin and classify its cells.
     pub fn scan(&self) -> DeletedScan {
-        let r = self.region();
-        let mut scan = DeletedScan::default();
-        let mut keys: HashMap<u32, RawKey> = HashMap::new();
-        let mut free_vk: Vec<u32> = Vec::new();
-
-        let mut pos = 0usize;
-        while pos + HBIN_HEADER <= r.len() {
-            if &r[pos..pos + 4] != b"hbin" {
-                pos += 4096;
-                continue;
-            }
-            let size = u32_at(r, pos + 8) as usize;
-            if size == 0 || !size.is_multiple_of(4096) || pos + size > r.len() {
-                pos += 4096;
-                continue;
-            }
-            scan.bins += 1;
-            let end = pos + size;
-            let mut c = pos + HBIN_HEADER;
-            while c + 8 <= end {
-                let raw = i32::from_le_bytes([r[c], r[c + 1], r[c + 2], r[c + 3]]);
-                let csize = raw.unsigned_abs() as usize;
-                if csize < 8 || !csize.is_multiple_of(8) || c + csize > end {
-                    break;
-                }
-                scan.cells += 1;
-                let magic = &r[c + 4..c + 6];
-                let off = c as u32;
-                if magic == b"nk" {
-                    if let Some(k) = self.parse_nk(off) {
-                        if k.allocated {
-                            scan.live_keys += 1;
-                        }
-                        keys.insert(off, k);
-                    }
-                } else if magic == b"vk" && raw > 0 {
-                    free_vk.push(off);
-                }
-                c += csize;
-            }
-            pos = end;
+        let s = self.image().scan();
+        DeletedScan {
+            bins: s.bins,
+            cells: s.cells,
+            live_keys: s.live_keys,
+            deleted_keys: s
+                .deleted_keys
+                .into_iter()
+                .map(|dk| DeletedKey { key: key_from(dk.key), path: dk.path, values: dk.values.into_iter().map(value_from).collect() })
+                .collect(),
+            orphan_values: s.orphan_values.into_iter().map(value_from).collect(),
         }
-
-        let mut referenced: HashSet<u32> = HashSet::new();
-        let mut deleted: Vec<DeletedKey> = Vec::new();
-        for key in keys.values().filter(|k| !k.allocated) {
-            let path = self.resolve_path(key, &keys);
-            let values = self.values_of(key, &mut referenced);
-            deleted.push(DeletedKey { key: key.clone(), path, values });
-        }
-        deleted.sort_by(|a, b| a.path.cmp(&b.path).then(a.key.offset.cmp(&b.key.offset)));
-        scan.deleted_keys = deleted;
-
-        for off in free_vk {
-            if referenced.contains(&off) {
-                continue;
-            }
-            if let Some(v) = self.parse_vk(off) {
-                scan.orphan_values.push(v);
-            }
-        }
-        scan
-    }
-
-    fn resolve_path(&self, key: &RawKey, keys: &HashMap<u32, RawKey>) -> String {
-        let mut parts = vec![key.name.clone()];
-        let mut cur = key.parent;
-        let mut hops = 0;
-        loop {
-            if cur == self.root_cell {
-                parts.reverse();
-                return parts.join("\\");
-            }
-            hops += 1;
-            if hops > MAX_CHAIN {
-                break;
-            }
-            match keys.get(&cur) {
-                Some(p) if p.is_root => {
-                    parts.reverse();
-                    return parts.join("\\");
-                }
-                Some(p) => {
-                    parts.push(p.name.clone());
-                    cur = p.parent;
-                }
-                None => break,
-            }
-        }
-        parts.push("?".to_string());
-        parts.reverse();
-        parts.join("\\")
     }
 }
 
