@@ -34,7 +34,7 @@ It is the Rust successor of [Boromir](https://github.com/Alexgpsec/Persistence_B
 - **52 Windows techniques**, each read from the hive it lives in: HKLM `SOFTWARE`/`SYSTEM`, every `NTUSER.DAT`, `DEFAULT` and `UsrClass.dat`, including `Wow6432Node` variants.
 - **Linux persistence**: cron, systemd, shell profiles, SSH, sudoers, PAM, udev, kernel modules, package hooks, `ld.so.preload` and live-process anomalies.
 - **Deleted persistence**: keys and values recovered from freed hive cells, plus anything that existed in a Volume Shadow Copy but is gone from the live volume. On ext4, the jbd2 journal gives back deleted crontabs, units and keys with their name, dates and content, and the previous content of files that were rewritten.
-- **Carving, when you ask for it.** `--carve` scans the raw bytes of an image, a pagefile or a memory dump for whole registry hives that no file system points to any more, and runs every technique on them. Off by default; every finding it adds is tagged `carved`.
+- **Carving, when you ask for it.** `--carve` scans the raw bytes of an image, a pagefile or a memory dump for whole registry hives that no file system points to any more, and runs every technique on them. Off by default; every finding it adds is tagged `carved`. The scanner and the hive-bin chain reader are the [blockcarve](https://github.com/jupyterj0nes/blockcarve) crate shared with masstin, allymacb and caarea.
 - **One CSV timeline** with the same columns as [masstin](https://github.com/jupyterj0nes/masstin), so persistence and lateral movement from the same case concatenate.
 - **Nothing silent**: 130+ numbered diagnostic codes with a severity; a corrupt log, a renamed hive or a parser panic is reported and the run goes on.
 

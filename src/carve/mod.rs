@@ -2,14 +2,15 @@
 //! any blob. Opt-in (`--carve`), never part of the default run, and every
 //! finding it produces is tagged `carved`.
 //!
-//! The scan engine ([`scan`]) and the guarded block sources ([`source`]) are
-//! the EVTX carver design from masstin; the registry side ([`hive`]) carves
-//! whole hives by following the self-describing hive-bin chain.
+//! The scan engine, the guarded block sources and the hive-bin chain reader
+//! come from the `blockcarve` crate shared with masstin, allymacb and caarea;
+//! the registry side ([`hive`]) keeps faramir's header type, error codes and
+//! sidecars.
 
 pub mod fold;
 pub mod hive;
 pub mod scan;
-pub mod source;
+pub use blockcarve::source;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -20,7 +21,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 pub use fold::{is_carved_source, tag_and_fold, FoldReport, SOURCE_CARVED, SOURCE_CARVED_DELETED};
 pub use hive::{fingerprints_under, CarvedHive};
 pub use scan::ScanStats;
-pub use source::{BlockSource, DirectSource, GuardedSource, MemorySource};
+pub use blockcarve::source::{is_device_path, BlockSource, DirectSource, GuardedSource, MemorySource};
 
 use crate::errors::FaramirError;
 use crate::windows::diag;
@@ -50,61 +51,6 @@ impl CarveReport {
     }
 }
 
-/// `\\.\PhysicalDrive0`, `\\.\C:`, `/dev/sda`: a device rather than a file.
-pub fn is_device_path(path: &Path) -> bool {
-    let s = path.to_string_lossy();
-    s.starts_with("\\\\.\\") || s.starts_with("\\\\?\\") || s.starts_with("/dev/")
-}
-
-/// Size of a raw device, which `metadata().len()` reports as zero.
-#[cfg(windows)]
-fn device_length(file: &mut std::fs::File) -> Option<u64> {
-    use std::os::windows::io::AsRawHandle;
-    #[repr(C)]
-    struct GetLengthInformation {
-        length: i64,
-    }
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn DeviceIoControl(
-            device: *mut std::ffi::c_void,
-            control_code: u32,
-            in_buffer: *mut std::ffi::c_void,
-            in_size: u32,
-            out_buffer: *mut std::ffi::c_void,
-            out_size: u32,
-            returned: *mut u32,
-            overlapped: *mut std::ffi::c_void,
-        ) -> i32;
-    }
-    const IOCTL_DISK_GET_LENGTH_INFO: u32 = 0x0007_405C;
-    let mut info = GetLengthInformation { length: 0 };
-    let mut returned: u32 = 0;
-    // SAFETY: the handle is open for the lifetime of `file`, the out buffer is a
-    // correctly sized, writable struct and the IOCTL takes no input buffer.
-    let ok = unsafe {
-        DeviceIoControl(
-            file.as_raw_handle(),
-            IOCTL_DISK_GET_LENGTH_INFO,
-            std::ptr::null_mut(),
-            0,
-            &mut info as *mut GetLengthInformation as *mut std::ffi::c_void,
-            std::mem::size_of::<GetLengthInformation>() as u32,
-            &mut returned,
-            std::ptr::null_mut(),
-        )
-    };
-    (ok != 0 && info.length > 0).then_some(info.length as u64)
-}
-
-#[cfg(not(windows))]
-fn device_length(file: &mut std::fs::File) -> Option<u64> {
-    use std::io::{Seek, SeekFrom};
-    let end = file.seek(SeekFrom::End(0)).ok()?;
-    file.seek(SeekFrom::Start(0)).ok()?;
-    (end > 0).then_some(end)
-}
-
 /// Open a disk image or plain file as a block source, by extension. A raw
 /// device (`\\.\PhysicalDrive0`, `/dev/sdb`) is read unbuffered so every
 /// request stays sector aligned.
@@ -130,16 +76,7 @@ pub fn open_source(path: &Path) -> Result<Box<dyn BlockSource>, FaramirError> {
         let (reader, size) = crate::ingest::vhd::open_virtual_disk(&label).map_err(fail)?;
         return Ok(Box::new(DirectSource::new(reader, size, label)));
     }
-    let mut file = std::fs::File::open(path).map_err(|e| fail(e.to_string()))?;
-    let mut size = file.metadata().map(|m| m.len()).unwrap_or(0);
-    if size == 0 && is_device_path(path) {
-        size = device_length(&mut file).ok_or_else(|| fail("cannot determine the device size".to_string()))?;
-        return Ok(Box::new(DirectSource::new(file, size, label)));
-    }
-    if size == 0 {
-        return Err(fail("empty file".to_string()));
-    }
-    Ok(Box::new(DirectSource::new(std::io::BufReader::new(file), size, label)))
+    blockcarve::source::open_file(path).map_err(FaramirError::CarveOpenFailed)
 }
 
 fn progress_bar(size: u64) -> ProgressBar {
