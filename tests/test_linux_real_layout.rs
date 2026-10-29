@@ -207,3 +207,37 @@ fn bracketed_pam_control_does_not_hide_the_module() {
     let evs = pam(&d, "broken", "auth [success=1 default=ignore pam_unix.so\n");
     assert!(evs.is_empty(), "unterminated control is skipped, not misparsed: {evs:?}");
 }
+
+// ─── browser extensions on a Linux tree ──────────────────────────────────────
+
+#[test]
+fn browser_profiles_and_policies_on_a_linux_tree() {
+    let d = TempDir::new("lnx_browser");
+    let r = uac_root(&d);
+    let rel = r.strip_prefix(&d.path).unwrap().display().to_string();
+    d.write(&format!("{rel}/home/bob/.config/google-chrome/Default/Preferences"), br#"{"extensions":{"settings":{"abcdefghijklmnopabcdefghijklmnop":{"location":4,"from_webstore":false,"state":1,"install_time":"13345000000000000","path":"/opt/ext","manifest":{"name":"Dev Loader","version":"1.0","permissions":["webRequest","<all_urls>"]}}}}}"#);
+    d.write(&format!("{rel}/home/bob/.config/google-chrome/Default/Extensions/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/2.0_0/manifest.json"), br#"{"name":"Orphan","version":"2.0","permissions":["cookies"]}"#);
+    d.write(&format!("{rel}/home/bob/.mozilla/firefox/abc.default/extensions.json"), br#"{"addons":[{"id":"side@x","type":"extension","version":"1","location":"app-system-share","sourceURI":null,"installDate":1700000000000,"userDisabled":false,"active":true,"defaultLocale":{"name":"Side"},"userPermissions":{"permissions":["nativeMessaging"],"origins":[]}}]}"#);
+    d.write(&format!("{rel}/etc/opt/chrome/policies/managed/lab.json"), br#"{"ExtensionInstallForcelist":["forcedforcedforcedforcedforcedfo;https://evil.example/f.xml"]}"#);
+    d.write(&format!("{rel}/etc/firefox/policies/policies.json"), br#"{"policies":{"Extensions":{"Install":["https://evil.example/p.xpi"]}}}"#);
+    d.write(&format!("{rel}/home/bob/.config/google-chrome/Default/Cache/data_0"), b"junk");
+    diag::clear();
+    let events = process_linux_target(&r, "host");
+    let br: Vec<_> = events.iter().filter(|e| e.artifact.starts_with("linux:browser:")).collect();
+    let cmds: Vec<&str> = br.iter().map(|e| e.commandline.as_deref().unwrap_or("")).collect();
+    assert_eq!(br.len(), 5, "{cmds:?}");
+    let find = |n: &str| cmds.iter().find(|c| c.contains(n)).copied().unwrap_or_else(|| panic!("{n} missing: {cmds:?}"));
+    assert!(find("abcdefghijklmnopabcdefghijklmnop").contains("[unpacked (developer mode), path /opt/ext]"));
+    assert!(find("abcdefghijklmnopabcdefghijklmnop").contains("/home/bob/.config/google-chrome/Default/Preferences"), "host path, not staging");
+    assert!(find("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz").contains("manifest on disk"));
+    assert!(find("side@x").contains("sideloaded") && find("side@x").contains("nativeMessaging"));
+    assert!(find("forcedforcedforcedforcedforcedfo").contains("force-installed by policy"));
+    assert!(find("p.xpi").contains("force-installed by policy"));
+    let forced = br.iter().filter(|e| e.artifact == "linux:browser:extension_forced").count();
+    assert_eq!(forced, 2, "{br:?}");
+    let dev = br.iter().find(|e| e.commandline.as_deref().unwrap().contains("abcdefghijklmnop")).unwrap();
+    assert_eq!(dev.subject_username, "bob");
+    assert_eq!(dev.timestamp, "2023-11-21 00:26:40.000");
+    assert_eq!(dev.processname, "chrome");
+    assert!(!diag::has("ERR_WIN_BROWSER_PROFILE_PARSE"));
+}

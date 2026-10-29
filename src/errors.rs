@@ -219,6 +219,8 @@ pub enum FaramirError {
     TxLogRemoteMatch(String),
     /// Dirty hive was rebuilt from transaction logs (3048)
     HiveRecovered(String),
+    /// Browser profile or policy JSON could not be parsed (3049)
+    BrowserProfileParseError(String),
 
     // ─── 4000..4999: Linux Persistence ──────────────────────────────────────
     /// Invalid cron syntax (4001)
@@ -385,6 +387,7 @@ impl FaramirError {
             Self::HiveEmptyFile(_) => "ERR_WIN_HIVE_EMPTY",
             Self::TxLogRemoteMatch(_) => "ERR_WIN_TX_LOG_REMOTE_MATCH",
             Self::HiveRecovered(_) => "ERR_WIN_HIVE_RECOVERED",
+            Self::BrowserProfileParseError(_) => "ERR_WIN_BROWSER_PROFILE_PARSE",
 
             Self::CronSyntax(_) => "ERR_LNX_CRON_SYNTAX",
             Self::CronNoUser(_) => "ERR_LNX_CRON_NO_USER",
@@ -519,6 +522,7 @@ impl FaramirError {
             Self::HiveEmptyFile(_) => 3046,
             Self::TxLogRemoteMatch(_) => 3047,
             Self::HiveRecovered(_) => 3048,
+            Self::BrowserProfileParseError(_) => 3049,
 
             Self::CronSyntax(_) => 4001,
             Self::CronNoUser(_) => 4002,
@@ -586,6 +590,7 @@ impl FaramirError {
             | Self::LinuxExtractError(_)
             | Self::ExtJournalParseError(_)
             | Self::ExtDeletedContentReused(_)
+            | Self::BrowserProfileParseError(_)
             | Self::ValueEmpty(_) => Severity::Warning,
 
             Self::HiveCompanionSkipped(_)
@@ -718,6 +723,7 @@ impl FaramirError {
             | Self::HiveEmptyFile(s)
             | Self::TxLogRemoteMatch(s)
             | Self::HiveRecovered(s)
+            | Self::BrowserProfileParseError(s)
             | Self::CronSyntax(s)
             | Self::CronNoUser(s)
             | Self::CronNoCommand(s)
@@ -849,6 +855,7 @@ impl FaramirError {
             Self::HiveEmptyFile(e()),
             Self::TxLogRemoteMatch(e()),
             Self::HiveRecovered(e()),
+            Self::BrowserProfileParseError(e()),
             Self::CronSyntax(e()),
             Self::CronNoUser(e()),
             Self::CronNoCommand(e()),
@@ -982,6 +989,7 @@ impl fmt::Display for FaramirError {
             Self::HiveEmptyFile(p) => write!(f, "Hive file is zero bytes: {}", p),
             Self::TxLogRemoteMatch(p) => write!(f, "Transaction log found outside the hive folder, matched by header: {}", p),
             Self::HiveRecovered(p) => write!(f, "Dirty hive rebuilt from transaction logs: {}", p),
+            Self::BrowserProfileParseError(e) => write!(f, "Cannot parse browser profile or policy file: {}", e),
 
             Self::CronSyntax(e) => write!(f, "Cron syntax error: {}", e),
             Self::CronNoUser(e) => write!(f, "Cron missing user: {}", e),

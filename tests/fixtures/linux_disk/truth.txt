@@ -17,6 +17,11 @@ gpt deleted_service /opt/lab/gpt/deleted_service.sh
 gpt deleted_key deleted-gpt@faramir
 gpt previous_crontab /opt/lab/gpt/crontab.sh
 gpt inplace_sudo /opt/lab/gpt/sudo.sh
+gpt browser_unpacked Lab Loader gpt
+gpt browser_orphan Lab Orphan gpt
+gpt browser_sideload lab-gpt@faramir
+gpt browser_forced https://evil.example/gpt.xml
+gpt browser_forced_ff https://evil.example/gpt.xpi
 gpt hostname lab-gpt
 gpt key lab-gpt@faramir
 lvm cron_d /opt/lab/lvm/cron_d.sh
@@ -38,6 +43,11 @@ lvm deleted_service /opt/lab/lvm/deleted_service.sh
 lvm deleted_key deleted-lvm@faramir
 lvm previous_crontab /opt/lab/lvm/crontab.sh
 lvm inplace_sudo /opt/lab/lvm/sudo.sh
+lvm browser_unpacked Lab Loader lvm
+lvm browser_orphan Lab Orphan lvm
+lvm browser_sideload lab-lvm@faramir
+lvm browser_forced https://evil.example/lvm.xml
+lvm browser_forced_ff https://evil.example/lvm.xpi
 lvm hostname lab-lvm
 lvm key lab-lvm@faramir
 xfs cron_d /opt/lab/xfs/cron_d.sh
@@ -59,6 +69,11 @@ xfs deleted_service /opt/lab/xfs/deleted_service.sh
 xfs deleted_key deleted-xfs@faramir
 xfs previous_crontab /opt/lab/xfs/crontab.sh
 xfs inplace_sudo /opt/lab/xfs/sudo.sh
+xfs browser_unpacked Lab Loader xfs
+xfs browser_orphan Lab Orphan xfs
+xfs browser_sideload lab-xfs@faramir
+xfs browser_forced https://evil.example/xfs.xml
+xfs browser_forced_ff https://evil.example/xfs.xpi
 xfs hostname lab-xfs
 xfs key lab-xfs@faramir
 lvmxfs cron_d /opt/lab/lvmxfs/cron_d.sh
@@ -80,6 +95,11 @@ lvmxfs deleted_service /opt/lab/lvmxfs/deleted_service.sh
 lvmxfs deleted_key deleted-lvmxfs@faramir
 lvmxfs previous_crontab /opt/lab/lvmxfs/crontab.sh
 lvmxfs inplace_sudo /opt/lab/lvmxfs/sudo.sh
+lvmxfs browser_unpacked Lab Loader lvmxfs
+lvmxfs browser_orphan Lab Orphan lvmxfs
+lvmxfs browser_sideload lab-lvmxfs@faramir
+lvmxfs browser_forced https://evil.example/lvmxfs.xml
+lvmxfs browser_forced_ff https://evil.example/lvmxfs.xpi
 lvmxfs hostname lab-lvmxfs
 lvmxfs key lab-lvmxfs@faramir
 real hostname leo-lnx01

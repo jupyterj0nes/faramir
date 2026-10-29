@@ -53,6 +53,19 @@ populate() {  # populate <mountpoint> <tag>
     printf '/opt/lab/%s/profile_d.sh\n' "$tag" > "$m/etc/profile.d/lab.sh"
     printf 'ACTION=="add", SUBSYSTEM=="usb", RUN+="/opt/lab/%s/udev.sh"\n' "$tag" > "$m/etc/udev/rules.d/99-lab.rules"
     printf 'install lab_mod /opt/lab/%s/modprobe.sh\n' "$tag" > "$m/etc/modprobe.d/lab.conf"
+    # browser extensions: an unpacked Chrome extension, a manifest without a Preferences entry,
+    # a sideloaded Firefox add-on, a Chrome policy force-install, plus cache junk that must not be copied
+    mkdir -p "$m/home/bob/.config/google-chrome/Default/Extensions/abcdefghijklmnopabcdefghijklmnop/1.0_0" \
+        "$m/home/bob/.config/google-chrome/Default/Extensions/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/2.0_0" \
+        "$m/home/bob/.config/google-chrome/Default/Cache" "$m/home/bob/.mozilla/firefox/lab.default/extensions" \
+        "$m/etc/opt/chrome/policies/managed" "$m/etc/firefox/policies"
+    printf '{"extensions":{"settings":{"abcdefghijklmnopabcdefghijklmnop":{"location":4,"from_webstore":false,"state":1,"install_time":"13345000000000000","path":"/opt/lab/%s/ext","manifest":{"name":"Lab Loader %s","version":"1.0","permissions":["webRequest","<all_urls>"]}}}}}\n' "$tag" "$tag" > "$m/home/bob/.config/google-chrome/Default/Preferences"
+    printf '{"name":"Lab Loader %s","version":"1.0","permissions":["webRequest","<all_urls>"]}\n' "$tag" > "$m/home/bob/.config/google-chrome/Default/Extensions/abcdefghijklmnopabcdefghijklmnop/1.0_0/manifest.json"
+    printf '{"name":"Lab Orphan %s","version":"2.0","permissions":["cookies"]}\n' "$tag" > "$m/home/bob/.config/google-chrome/Default/Extensions/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/2.0_0/manifest.json"
+    head -c 65536 /dev/zero > "$m/home/bob/.config/google-chrome/Default/Cache/data_0"
+    printf '{"addons":[{"id":"lab-%s@faramir","type":"extension","version":"1","location":"app-system-share","sourceURI":null,"installDate":1700000000000,"userDisabled":false,"active":true,"defaultLocale":{"name":"Lab Addon %s"},"userPermissions":{"permissions":["nativeMessaging"],"origins":[]}}]}\n' "$tag" "$tag" > "$m/home/bob/.mozilla/firefox/lab.default/extensions.json"
+    printf '{"ExtensionInstallForcelist":["forcedforcedforcedforcedforcedfo;https://evil.example/%s.xml"]}\n' "$tag" > "$m/etc/opt/chrome/policies/managed/lab.json"
+    printf '{"policies":{"Extensions":{"Install":["https://evil.example/%s.xpi"]}}}\n' "$tag" > "$m/etc/firefox/policies/policies.json"
     # files that are deleted again: nothing points to them afterwards
     printf '* * * * * root /opt/lab/%s/deleted_cron.sh\n' "$tag" > "$m/etc/cron.d/gone"
     printf '[Unit]\nDescription=Gone\n[Service]\nExecStart=/opt/lab/%s/deleted_service.sh\n' "$tag" > "$m/etc/systemd/system/gone.service"
@@ -76,6 +89,11 @@ populate() {  # populate <mountpoint> <tag>
     echo "$tag deleted_key deleted-$tag@faramir" >> truth.txt
     echo "$tag previous_crontab /opt/lab/$tag/crontab.sh" >> truth.txt
     echo "$tag inplace_sudo /opt/lab/$tag/sudo.sh" >> truth.txt
+    echo "$tag browser_unpacked Lab Loader $tag" >> truth.txt
+    echo "$tag browser_orphan Lab Orphan $tag" >> truth.txt
+    echo "$tag browser_sideload lab-$tag@faramir" >> truth.txt
+    echo "$tag browser_forced https://evil.example/$tag.xml" >> truth.txt
+    echo "$tag browser_forced_ff https://evil.example/$tag.xpi" >> truth.txt
     echo "$tag hostname lab-$tag" >> truth.txt
     echo "$tag key lab-$tag@faramir" >> truth.txt
 }

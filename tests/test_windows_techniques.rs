@@ -829,9 +829,9 @@ fn run_all_with_empty_set_runs_only_filesystem_techniques() {
 
 #[test]
 fn technique_catalogue_is_complete_and_unique() {
-    assert_eq!(TechniqueId::ALL.len(), 36);
+    assert_eq!(TechniqueId::ALL.len(), 53);
     let labels: std::collections::HashSet<&str> = TechniqueId::ALL.iter().map(|t| t.label()).collect();
-    assert_eq!(labels.len(), 36);
+    assert_eq!(labels.len(), 53);
 }
 
 #[test]

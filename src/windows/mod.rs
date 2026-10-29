@@ -11,6 +11,7 @@ macro_rules! out {
 
 pub mod deleted;
 pub mod diag;
+pub mod extra;
 pub mod hives;
 pub mod techniques;
 pub mod txlog;

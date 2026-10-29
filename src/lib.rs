@@ -6,4 +6,5 @@ pub mod parsers;
 pub mod ingest;
 #[macro_use]
 pub mod windows;
+pub mod browser_ext;
 pub mod carve;

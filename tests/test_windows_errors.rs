@@ -204,7 +204,7 @@ fn catalog_windows_range_is_dense() {
     for w in nums.windows(2) {
         assert_eq!(w[1], w[0] + 1, "gap between {} and {}", w[0], w[1]);
     }
-    assert_eq!(*nums.last().unwrap(), 3048);
+    assert_eq!(*nums.last().unwrap(), 3049);
 }
 
 #[test]

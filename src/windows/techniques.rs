@@ -186,6 +186,98 @@ pub const NETSH_ROOTS: &[KeyRoot] = &[
 /// SYSTEM-hive techniques resolve `ControlSetNNN` first; these are the sub paths.
 pub const SYSTEM_ONLY: &[KeyRoot] = &[kr(Root::System, "", "System")];
 
+// ─── Key tables added after the IRFlow / Autoruns comparison ────────────────
+
+pub const POLICIES_RUN_ROOTS: &[KeyRoot] = &[
+    kr(Root::UserProfile, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer\Run", "User"),
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Policies\Explorer\Run", "System"),
+    kr(Root::Software, r"Wow6432Node\Microsoft\Windows\CurrentVersion\Policies\Explorer\Run", "System"),
+];
+pub const SHELL_FOLDERS_ROOTS: &[KeyRoot] = &[
+    kr(Root::UserProfile, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders", "User"),
+    kr(Root::UserProfile, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders", "User"),
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders", "System"),
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Explorer\Shell Folders", "System"),
+];
+pub const SSODL_ROOTS: &[KeyRoot] = &[
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\ShellServiceObjectDelayLoad", "System"),
+    kr(Root::Software, r"Wow6432Node\Microsoft\Windows\CurrentVersion\ShellServiceObjectDelayLoad", "System"),
+];
+pub const WINLOGON_NOTIFY_ROOTS: &[KeyRoot] = &[
+    kr(Root::Software, r"Microsoft\Windows NT\CurrentVersion\Winlogon\Notify", "System"),
+    kr(Root::Software, r"Wow6432Node\Microsoft\Windows NT\CurrentVersion\Winlogon\Notify", "System"),
+];
+pub const CREDENTIAL_PROVIDER_ROOTS: &[KeyRoot] = &[
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Authentication\Credential Providers", "System"),
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Authentication\Credential Provider Filters", "System"),
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Authentication\PLAP Providers", "System"),
+];
+pub const COM_TREATAS_ROOTS: &[KeyRoot] = &[
+    kr(Root::UserProfile, r"Software\Classes\CLSID", "User"),
+    kr(Root::UsrClass, r"CLSID", "User"),
+    kr(Root::Software, r"Classes\CLSID", "System"),
+    kr(Root::Software, r"Classes\Wow6432Node\CLSID", "System"),
+];
+pub const GPO_SCRIPT_ROOTS: &[KeyRoot] = &[
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Group Policy\Scripts\Startup", "System"),
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Group Policy\Scripts\Shutdown", "System"),
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\Scripts\Startup", "System"),
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\Scripts\Shutdown", "System"),
+    kr(Root::UserProfile, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\Scripts\Logon", "User"),
+    kr(Root::UserProfile, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\Scripts\Logoff", "User"),
+];
+/// Classes roots for file-association and shell-extension hijacks (ProgIDs are joined at run time).
+pub const CLASSES_ROOTS: &[KeyRoot] = &[
+    kr(Root::UsrClass, "", "User"),
+    kr(Root::UserProfile, r"Software\Classes", "User"),
+    kr(Root::Software, r"Classes", "System"),
+    kr(Root::Software, r"Classes\Wow6432Node", "System"),
+];
+pub const OFFICE_ROOTS: &[KeyRoot] = &[
+    kr(Root::UserProfile, r"SOFTWARE\Microsoft\Office", "User"),
+    kr(Root::Software, r"Microsoft\Office", "System"),
+    kr(Root::Software, r"Wow6432Node\Microsoft\Office", "System"),
+];
+pub const EXPLORER_HOOK_ROOTS: &[KeyRoot] = &[
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Explorer\Browser Helper Objects", "System"),
+    kr(Root::Software, r"Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Browser Helper Objects", "System"),
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Explorer\ShellExecuteHooks", "System"),
+    kr(Root::Software, r"Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\ShellExecuteHooks", "System"),
+    kr(Root::Software, r"Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers", "System"),
+    kr(Root::Software, r"Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers", "System"),
+    kr(Root::UserProfile, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Browser Helper Objects", "User"),
+    kr(Root::UserProfile, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellExecuteHooks", "User"),
+    kr(Root::UserProfile, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers", "User"),
+];
+pub const BROWSER_POLICY_ROOTS: &[KeyRoot] = &[
+    kr(Root::Software, r"Policies\Google\Chrome\ExtensionInstallForcelist", "System"),
+    kr(Root::Software, r"Policies\Microsoft\Edge\ExtensionInstallForcelist", "System"),
+    kr(Root::Software, r"Policies\BraveSoftware\Brave\ExtensionInstallForcelist", "System"),
+    kr(Root::Software, r"Policies\Chromium\ExtensionInstallForcelist", "System"),
+    kr(Root::Software, r"Policies\Mozilla\Firefox\Extensions\Install", "System"),
+    kr(Root::UserProfile, r"SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist", "User"),
+    kr(Root::UserProfile, r"SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist", "User"),
+    kr(Root::UserProfile, r"SOFTWARE\Policies\BraveSoftware\Brave\ExtensionInstallForcelist", "User"),
+    kr(Root::UserProfile, r"SOFTWARE\Policies\Chromium\ExtensionInstallForcelist", "User"),
+    kr(Root::UserProfile, r"SOFTWARE\Policies\Mozilla\Firefox\Extensions\Install", "User"),
+];
+pub const BROWSER_POLICY_SETTINGS_ROOTS: &[KeyRoot] = &[
+    kr(Root::Software, r"Policies\Google\Chrome\ExtensionSettings", "System"),
+    kr(Root::Software, r"Policies\Microsoft\Edge\ExtensionSettings", "System"),
+    kr(Root::Software, r"Policies\Mozilla\Firefox\ExtensionSettings", "System"),
+    kr(Root::UserProfile, r"SOFTWARE\Policies\Google\Chrome\ExtensionSettings", "User"),
+    kr(Root::UserProfile, r"SOFTWARE\Policies\Microsoft\Edge\ExtensionSettings", "User"),
+    kr(Root::UserProfile, r"SOFTWARE\Policies\Mozilla\Firefox\ExtensionSettings", "User"),
+];
+pub const BROWSER_EXTERNAL_ROOTS: &[KeyRoot] = &[
+    kr(Root::Software, r"Google\Chrome\Extensions", "System"),
+    kr(Root::Software, r"Wow6432Node\Google\Chrome\Extensions", "System"),
+    kr(Root::Software, r"Microsoft\Edge\Extensions", "System"),
+    kr(Root::Software, r"Wow6432Node\Microsoft\Edge\Extensions", "System"),
+    kr(Root::UserProfile, r"SOFTWARE\Google\Chrome\Extensions", "User"),
+    kr(Root::UserProfile, r"SOFTWARE\Microsoft\Edge\Extensions", "User"),
+];
+
 // ─── Technique catalogue ────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -225,12 +317,30 @@ pub enum TechniqueId {
     TimeProviders,
     NetshHelperDlls,
     PowerShellProfiles,
+    // ── added after the IRFlow / Autoruns comparison ──
+    PoliciesRun,
+    StartupFolderRedirect,
+    ShellServiceObjectDelayLoad,
+    SecurityProviders,
+    WinlogonNotify,
+    NetworkProviders,
+    CredentialProviders,
+    TerminalServerPrograms,
+    CorProfiler,
+    ComTreatAs,
+    GpoScripts,
+    FileAssociations,
+    OfficeAddins,
+    ShellExtensions,
+    ServiceFailureCommand,
+    SafeBootAlternateShell,
+    BrowserExtensions,
     /// Deleted keys/values recovered from free hive cells (see `windows::deleted`).
     DeletedRegistry,
 }
 
 impl TechniqueId {
-    pub const ALL: [TechniqueId; 36] = [
+    pub const ALL: [TechniqueId; 53] = [
         TechniqueId::Run,
         TechniqueId::RunOnce,
         TechniqueId::RunEx,
@@ -266,6 +376,23 @@ impl TechniqueId {
         TechniqueId::TimeProviders,
         TechniqueId::NetshHelperDlls,
         TechniqueId::PowerShellProfiles,
+        TechniqueId::PoliciesRun,
+        TechniqueId::StartupFolderRedirect,
+        TechniqueId::ShellServiceObjectDelayLoad,
+        TechniqueId::SecurityProviders,
+        TechniqueId::WinlogonNotify,
+        TechniqueId::NetworkProviders,
+        TechniqueId::CredentialProviders,
+        TechniqueId::TerminalServerPrograms,
+        TechniqueId::CorProfiler,
+        TechniqueId::ComTreatAs,
+        TechniqueId::GpoScripts,
+        TechniqueId::FileAssociations,
+        TechniqueId::OfficeAddins,
+        TechniqueId::ShellExtensions,
+        TechniqueId::ServiceFailureCommand,
+        TechniqueId::SafeBootAlternateShell,
+        TechniqueId::BrowserExtensions,
         TechniqueId::DeletedRegistry,
     ];
 
@@ -306,6 +433,23 @@ impl TechniqueId {
             TechniqueId::TimeProviders => "Time Provider DLL",
             TechniqueId::NetshHelperDlls => "Netsh Helper DLL",
             TechniqueId::PowerShellProfiles => "PowerShell Profile Script",
+            TechniqueId::PoliciesRun => "Policies Explorer Run Key",
+            TechniqueId::StartupFolderRedirect => "Startup Folder Redirect",
+            TechniqueId::ShellServiceObjectDelayLoad => "ShellServiceObjectDelayLoad",
+            TechniqueId::SecurityProviders => "Security Support Provider",
+            TechniqueId::WinlogonNotify => "Winlogon Notify DLL",
+            TechniqueId::NetworkProviders => "Network Provider DLL",
+            TechniqueId::CredentialProviders => "Credential Provider",
+            TechniqueId::TerminalServerPrograms => "Terminal Server Startup Program",
+            TechniqueId::CorProfiler => ".NET COR_PROFILER",
+            TechniqueId::ComTreatAs => "COM TreatAs Redirect",
+            TechniqueId::GpoScripts => "Group Policy Script",
+            TechniqueId::FileAssociations => "File Association Hijack",
+            TechniqueId::OfficeAddins => "Office Add-in",
+            TechniqueId::ShellExtensions => "Shell Extension / BHO",
+            TechniqueId::ServiceFailureCommand => "Service Failure Command",
+            TechniqueId::SafeBootAlternateShell => "SafeBoot AlternateShell",
+            TechniqueId::BrowserExtensions => "Browser Extension",
             TechniqueId::DeletedRegistry => "Deleted Registry Persistence",
         }
     }
@@ -348,6 +492,23 @@ impl TechniqueId {
             TechniqueId::TimeProviders => SYSTEM_ONLY,
             TechniqueId::NetshHelperDlls => NETSH_ROOTS,
             TechniqueId::PowerShellProfiles => &[],
+            TechniqueId::PoliciesRun => POLICIES_RUN_ROOTS,
+            TechniqueId::StartupFolderRedirect => SHELL_FOLDERS_ROOTS,
+            TechniqueId::ShellServiceObjectDelayLoad => SSODL_ROOTS,
+            TechniqueId::SecurityProviders => SYSTEM_ONLY,
+            TechniqueId::WinlogonNotify => WINLOGON_NOTIFY_ROOTS,
+            TechniqueId::NetworkProviders => SYSTEM_ONLY,
+            TechniqueId::CredentialProviders => CREDENTIAL_PROVIDER_ROOTS,
+            TechniqueId::TerminalServerPrograms => SYSTEM_ONLY,
+            TechniqueId::CorProfiler => ENVIRONMENT_ROOTS,
+            TechniqueId::ComTreatAs => COM_TREATAS_ROOTS,
+            TechniqueId::GpoScripts => GPO_SCRIPT_ROOTS,
+            TechniqueId::FileAssociations => CLASSES_ROOTS,
+            TechniqueId::OfficeAddins => OFFICE_ROOTS,
+            TechniqueId::ShellExtensions => EXPLORER_HOOK_ROOTS,
+            TechniqueId::ServiceFailureCommand => SYSTEM_ONLY,
+            TechniqueId::SafeBootAlternateShell => SYSTEM_ONLY,
+            TechniqueId::BrowserExtensions => BROWSER_POLICY_ROOTS,
             TechniqueId::DeletedRegistry => &[],
         }
     }
@@ -497,11 +658,11 @@ impl HiveSet {
 
 // ─── Value helpers ──────────────────────────────────────────────────────────
 
-fn fmt_ts(dt: &chrono::DateTime<Utc>) -> String {
+pub(crate) fn fmt_ts(dt: &chrono::DateTime<Utc>) -> String {
     dt.format(FORMAT_DATE).to_string()
 }
 
-fn file_mtime_string(path: &Path, created: bool) -> String {
+pub(crate) fn file_mtime_string(path: &Path, created: bool) -> String {
     path.metadata()
         .ok()
         .and_then(|m| if created { m.created().ok() } else { m.modified().ok() })
@@ -561,15 +722,15 @@ pub fn is_default_value_name(name: &str) -> bool {
     name.is_empty() || name.eq_ignore_ascii_case("(default)")
 }
 
-fn find_value<'a>(key: &'a KeyNode, name: &str) -> Option<&'a KeyValue> {
+pub(crate) fn find_value<'a>(key: &'a KeyNode, name: &str) -> Option<&'a KeyValue> {
     key.values().iter().find(|v| v.name().eq_ignore_ascii_case(name))
 }
 
-fn find_default_value(key: &KeyNode) -> Option<&KeyValue> {
+pub(crate) fn find_default_value(key: &KeyNode) -> Option<&KeyValue> {
     key.values().iter().find(|v| is_default_value_name(v.name()))
 }
 
-fn display_value(v: &KeyValue) -> String {
+pub(crate) fn display_value(v: &KeyValue) -> String {
     string_value(v).unwrap_or_else(|| v.value().to_string())
 }
 
@@ -577,7 +738,7 @@ fn display_value(v: &KeyValue) -> String {
 
 type KeyRef = Rc<RefCell<KeyNode>>;
 
-fn root_key(info: &HiveInfo, hive: &mut HiveFile) -> Result<KeyNode, FaramirError> {
+pub(crate) fn root_key(info: &HiveInfo, hive: &mut HiveFile) -> Result<KeyNode, FaramirError> {
     hive.root_key_node()
         .map_err(|e| FaramirError::HiveRootKeyFailed(format!("{}: {e}", info.path.display())))
 }
@@ -589,7 +750,7 @@ fn subpath(root: &KeyNode, path: &str, hive: &mut HiveFile, info: &HiveInfo) -> 
 
 /// Run `f` for every hive accepted by each root where the key path exists.
 /// Panics inside nt_hive2 are caught per hive and reported as `TechniquePanicked`.
-fn visit_roots<F>(set: &mut HiveSet, roots: &[KeyRoot], technique: &str, mut f: F) -> Vec<Persistence>
+pub(crate) fn visit_roots<F>(set: &mut HiveSet, roots: &[KeyRoot], technique: &str, mut f: F) -> Vec<Persistence>
 where
     F: FnMut(&KeyRoot, &HiveInfo, &KeyNode, &mut HiveFile) -> Vec<Persistence>,
 {
@@ -602,6 +763,10 @@ where
             let label = info.path.display().to_string();
             let result = catch_unwind(AssertUnwindSafe(|| -> Result<Vec<Persistence>, FaramirError> {
                 let rk = root_key(info, hive)?;
+                if root.path.is_empty() {
+                    // the root itself (UsrClass.dat is HKCU\Software\Classes)
+                    return Ok(stamp_origin(f(root, info, &rk, hive), &info.path));
+                }
                 match subpath(&rk, root.path, hive, info)? {
                     Some(key_rc) => {
                         let key = key_rc.borrow();
@@ -669,7 +834,7 @@ pub fn resolve_control_set(root: &KeyNode, hive: &mut HiveFile, label: &str) -> 
 }
 
 /// Run `f` on `ControlSetNNN\<sub>` of every SYSTEM hive.
-fn visit_control_set<F>(set: &mut HiveSet, sub: &str, technique: &str, mut f: F) -> Vec<Persistence>
+pub(crate) fn visit_control_set<F>(set: &mut HiveSet, sub: &str, technique: &str, mut f: F) -> Vec<Persistence>
 where
     F: FnMut(&HiveInfo, &KeyNode, &mut HiveFile, u32) -> Vec<Persistence>,
 {
@@ -723,7 +888,7 @@ where
     out
 }
 
-fn persist(ts: String, technique: &str, path: String, value: String, access: &str) -> Persistence {
+pub(crate) fn persist(ts: String, technique: &str, path: String, value: String, access: &str) -> Persistence {
     Persistence {
         timestamp: ts,
         technique: technique.to_string(),
@@ -747,7 +912,7 @@ fn stamp_origin(mut findings: Vec<Persistence>, origin: &Path) -> Vec<Persistenc
 }
 
 /// Every string value of the key → one finding each (Run keys & co.).
-fn string_values_of_key(set: &mut HiveSet, roots: &[KeyRoot], technique: &str) -> Vec<Persistence> {
+pub(crate) fn string_values_of_key(set: &mut HiveSet, roots: &[KeyRoot], technique: &str) -> Vec<Persistence> {
     visit_roots(set, roots, technique, |root, info, key, _hive| {
         let ts = fmt_ts(key.timestamp());
         key.values()
@@ -778,7 +943,7 @@ fn string_values_of_key(set: &mut HiveSet, roots: &[KeyRoot], technique: &str) -
 }
 
 /// A single named value of the key.
-fn single_value_key(
+pub(crate) fn single_value_key(
     set: &mut HiveSet,
     roots: &[KeyRoot],
     value_names: &[&str],
@@ -1671,6 +1836,23 @@ pub fn run_technique(id: TechniqueId, set: &mut HiveSet, source: Option<&Path>) 
         TechniqueId::TimeProviders => get_time_providers(set),
         TechniqueId::NetshHelperDlls => get_netsh_helper_dlls(set),
         TechniqueId::PowerShellProfiles => source.map(get_powershell_profiles).unwrap_or_default(),
+        TechniqueId::PoliciesRun => super::extra::get_policies_run(set),
+        TechniqueId::StartupFolderRedirect => super::extra::get_startup_folder_redirect(set),
+        TechniqueId::ShellServiceObjectDelayLoad => super::extra::get_ssodl(set),
+        TechniqueId::SecurityProviders => super::extra::get_security_providers(set),
+        TechniqueId::WinlogonNotify => super::extra::get_winlogon_notify(set),
+        TechniqueId::NetworkProviders => super::extra::get_network_providers(set),
+        TechniqueId::CredentialProviders => super::extra::get_credential_providers(set),
+        TechniqueId::TerminalServerPrograms => super::extra::get_terminal_server_programs(set),
+        TechniqueId::CorProfiler => super::extra::get_cor_profiler(set),
+        TechniqueId::ComTreatAs => super::extra::get_com_treatas(set),
+        TechniqueId::GpoScripts => super::extra::get_gpo_scripts(set, source),
+        TechniqueId::FileAssociations => super::extra::get_file_associations(set),
+        TechniqueId::OfficeAddins => super::extra::get_office_addins(set),
+        TechniqueId::ShellExtensions => super::extra::get_shell_extensions(set),
+        TechniqueId::ServiceFailureCommand => super::extra::get_service_failure_commands(set),
+        TechniqueId::SafeBootAlternateShell => super::extra::get_safeboot_alternate_shell(set),
+        TechniqueId::BrowserExtensions => super::extra::get_browser_extensions(set, source),
         TechniqueId::DeletedRegistry => super::deleted::scan_set(set),
     }
 }

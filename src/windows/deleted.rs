@@ -339,6 +339,11 @@ const SYSTEM_LOCATIONS: &[(&str, TechniqueId)] = &[
     (r"Control\Session Manager", TechniqueId::BootExecute),
     (r"Control\Lsa", TechniqueId::LsaPackages),
     (r"Control\ContentIndex\Language", TechniqueId::NldpDllOverridePath),
+    (r"Control\SecurityProviders", TechniqueId::SecurityProviders),
+    (r"Control\NetworkProvider", TechniqueId::NetworkProviders),
+    (r"Control\Terminal Server", TechniqueId::TerminalServerPrograms),
+    (r"Control\Session Manager\Environment", TechniqueId::CorProfiler),
+    (r"Control\SafeBoot", TechniqueId::SafeBootAlternateShell),
     (r"Services", TechniqueId::WindowsServices),
 ];
 
@@ -376,10 +381,10 @@ pub fn classify_deleted_path(path: &str, kind: HiveKind) -> Option<(TechniqueId,
     let mut best: Option<(usize, TechniqueId, &'static str)> = None;
     for id in TechniqueId::ALL {
         for kr in id.roots() {
-            if kr.root == Root::System || !kr.root.accepts(kind) {
+            if kr.root == Root::System || !kr.root.accepts(kind) || kr.path.is_empty() {
                 continue;
             }
-            if path_under(path, kr.path) {
+            if path_under(path, kr.path) && deleted_path_marker_ok(id, path) {
                 let depth = kr.path.len();
                 if best.is_none_or(|(d, _, _)| depth > d) {
                     best = Some((depth, id, kr.access));
@@ -388,6 +393,21 @@ pub fn classify_deleted_path(path: &str, kind: HiveKind) -> Option<(TechniqueId,
         }
     }
     best.map(|(_, id, access)| (id, access))
+}
+
+/// Techniques rooted at a wide subtree (`Microsoft\Office`, `Classes`) only
+/// claim a deleted key when the path shows the persistence location itself.
+fn deleted_path_marker_ok(id: TechniqueId, path: &str) -> bool {
+    let p = path.to_uppercase();
+    let any = |markers: &[&str]| markers.iter().any(|m| p.contains(&m.to_uppercase()));
+    match id {
+        TechniqueId::OfficeAddins => any(&["\\ADDINS", "\\EXCEL\\OPTIONS"]),
+        TechniqueId::FileAssociations => any(&["\\SHELL\\OPEN\\COMMAND"]),
+        TechniqueId::ShellExtensions => any(&["\\SHELLEX\\", "BROWSER HELPER OBJECTS", "SHELLEXECUTEHOOKS", "SHELLICONOVERLAYIDENTIFIERS"]),
+        TechniqueId::ComTreatAs => any(&["\\TREATAS"]),
+        TechniqueId::ComHijacking => any(&["SERVER32"]) || !any(&["\\TREATAS"]),
+        _ => true,
+    }
 }
 
 fn looks_executable(data: &str) -> bool {

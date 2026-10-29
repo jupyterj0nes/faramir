@@ -299,6 +299,27 @@ fn extract_artifacts_from_ntfs<R: Read + Seek>(
         }
     }
 
+    // 6. Machine-wide Startup folder, Group Policy scripts, browser policy files
+    let machine_trees: &[&[&str]] = &[
+        &["ProgramData", "Microsoft", "Windows", "Start Menu", "Programs", "StartUp"],
+        &["Windows", "System32", "GroupPolicy", "Machine", "Scripts"],
+        &["Windows", "System32", "GroupPolicy", "User", "Scripts"],
+        &["Program Files", "Mozilla Firefox", "distribution"],
+        &["Program Files (x86)", "Mozilla Firefox", "distribution"],
+    ];
+    for rel in machine_trees {
+        if let Ok(d) = navigate_to_path(&ntfs, &root_dir, &mut part_reader, rel) {
+            let dest = rel.iter().fold(part_dir.clone(), |p, c| p.join(c));
+            total_extracted += dump_all_files_recursive(&ntfs, &d, &mut part_reader, &dest).unwrap_or(0);
+        }
+    }
+    for rel in [&["Program Files", "Google", "Chrome", "Application"][..], &["Program Files (x86)", "Google", "Chrome", "Application"][..], &["Program Files (x86)", "Microsoft", "Edge", "Application"][..]] {
+        if let Ok(d) = navigate_to_path(&ntfs, &root_dir, &mut part_reader, rel) {
+            let dest = rel.iter().fold(part_dir.clone(), |p, c| p.join(c));
+            total_extracted += dump_files_matching(&ntfs, &d, &mut part_reader, &dest, "external_extensions.json").unwrap_or(0);
+        }
+    }
+
     Ok(total_extracted)
 }
 
@@ -364,6 +385,67 @@ fn dump_files_matching<R: Read + Seek>(
     }
 
     Ok(count)
+}
+
+/// Dumps a browser profile tree keeping only extension files and skipping caches.
+fn dump_profile_recursive<R: Read + Seek>(
+    ntfs: &ntfs::Ntfs,
+    dir: &ntfs::NtfsFile,
+    reader: &mut R,
+    dest: &Path,
+    under_extensions: bool,
+    depth: usize,
+) -> Result<usize, String> {
+    if depth > 8 {
+        return Ok(0);
+    }
+    let index = dir.directory_index(reader).map_err(|e| e.to_string())?;
+    let mut count = 0;
+    let mut entries = index.entries();
+    while let Some(Ok(entry)) = entries.next(reader) {
+        if let Some(Ok(key)) = entry.key() {
+            let name = key.name().to_string_lossy().to_string();
+            if name == "." || name == ".." || name.starts_with('$') {
+                continue;
+            }
+            if key.is_directory() {
+                if crate::browser_ext::is_profile_dir_skipped(&name) {
+                    continue;
+                }
+                if let Ok(file) = entry.file_reference().to_file(ntfs, reader) {
+                    let ext = under_extensions || name.eq_ignore_ascii_case("Extensions");
+                    if let Ok(c) = dump_profile_recursive(ntfs, &file, reader, &dest.join(&name), ext, depth + 1) {
+                        count += c;
+                    }
+                }
+            } else if crate::browser_ext::is_profile_file_wanted(&name, under_extensions) {
+                if let Ok(file) = entry.file_reference().to_file(ntfs, reader) {
+                    let _ = fs::create_dir_all(dest);
+                    if dump_ntfs_file_data(&file, reader, &dest.join(&name)).is_ok() {
+                        count += 1;
+                    }
+                }
+            }
+        }
+    }
+    Ok(count)
+}
+
+/// Per-user artifacts beyond the hives: browser profiles, the Startup folder.
+fn dump_user_profile_dirs<R: Read + Seek>(ntfs: &ntfs::Ntfs, user_dir: &ntfs::NtfsFile, reader: &mut R, dest_user: &Path) -> usize {
+    let mut count = 0;
+    for rel in crate::browser_ext::WINDOWS_BROWSER_USER_DIRS {
+        if let Ok(d) = navigate_to_path(ntfs, user_dir, reader, rel) {
+            let dest = rel.iter().fold(dest_user.to_path_buf(), |p, c| p.join(c));
+            count += dump_profile_recursive(ntfs, &d, reader, &dest, false, 0).unwrap_or(0);
+        }
+    }
+    let startup = ["AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup"];
+    if let Ok(d) = navigate_to_path(ntfs, user_dir, reader, &startup) {
+        let dest = startup.iter().fold(dest_user.to_path_buf(), |p, c| p.join(c));
+        count += dump_all_files_recursive(ntfs, &d, reader, &dest).unwrap_or(0);
+    }
+    count
 }
 
 /// Dumps all files recursively from an NTFS directory
@@ -464,6 +546,7 @@ fn dump_user_hives<R: Read + Seek>(
 
     for (username, u_ref) in user_dirs {
         if let Ok(user_dir) = u_ref.to_file(ntfs, reader) {
+            count += dump_user_profile_dirs(ntfs, &user_dir, reader, &dest.join(&username));
             if let Ok(u_index) = user_dir.directory_index(reader) {
                 let mut u_entries = u_index.entries();
                 while let Some(Ok(entry)) = u_entries.next(reader) {

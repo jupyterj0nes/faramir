@@ -264,7 +264,7 @@ fn run_all_includes_deleted_persistence() {
 
 #[test]
 fn technique_catalogue_includes_deleted_registry() {
-    assert_eq!(TechniqueId::ALL.len(), 36);
+    assert_eq!(TechniqueId::ALL.len(), 53);
     assert!(TechniqueId::DeletedRegistry.is_registry_based());
     assert!(TechniqueId::DeletedRegistry.roots().is_empty());
     assert_eq!(TechniqueId::DeletedRegistry.label(), "Deleted Registry Persistence");

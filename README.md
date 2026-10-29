@@ -31,12 +31,12 @@ It is the Rust successor of [Boromir](https://github.com/Alexgpsec/Persistence_B
 
 - **Reads the evidence itself.** E01, raw, VMDK, VHD/VHDX images with NTFS, ext4 or XFS volumes (plain or LVM), KAPE, Velociraptor, Cortex XDR, CyLR and UAC packages, nested archives, mounted volumes or a single hive. No mounting, no manual extraction.
 - **Rebuilds dirty hives.** Finds `.LOG1`/`.LOG2` wherever the collector left them, checks they belong to the hive, validates every entry and replays them. Verified byte for byte against `rla.exe`.
-- **35 Windows techniques**, each read from the hive it lives in: HKLM `SOFTWARE`/`SYSTEM`, every `NTUSER.DAT`, `DEFAULT` and `UsrClass.dat`, including `Wow6432Node` variants.
+- **52 Windows techniques**, each read from the hive it lives in: HKLM `SOFTWARE`/`SYSTEM`, every `NTUSER.DAT`, `DEFAULT` and `UsrClass.dat`, including `Wow6432Node` variants.
 - **Linux persistence**: cron, systemd, shell profiles, SSH, sudoers, PAM, udev, kernel modules, package hooks, `ld.so.preload` and live-process anomalies.
 - **Deleted persistence**: keys and values recovered from freed hive cells, plus anything that existed in a Volume Shadow Copy but is gone from the live volume. On ext4, the jbd2 journal gives back deleted crontabs, units and keys with their name, dates and content, and the previous content of files that were rewritten.
 - **Carving, when you ask for it.** `--carve` scans the raw bytes of an image, a pagefile or a memory dump for whole registry hives that no file system points to any more, and runs every technique on them. Off by default; every finding it adds is tagged `carved`.
 - **One CSV timeline** with the same columns as [masstin](https://github.com/jupyterj0nes/masstin), so persistence and lateral movement from the same case concatenate.
-- **Nothing silent**: 100+ numbered diagnostic codes with a severity; a corrupt log, a renamed hive or a parser panic is reported and the run goes on.
+- **Nothing silent**: 130+ numbered diagnostic codes with a severity; a corrupt log, a renamed hive or a parser panic is reported and the run goes on.
 
 ## Demo
 
@@ -172,6 +172,7 @@ faramir -f /cases/WS01.mem -o ws01_memory.csv --carve
 | `.zip` `.tar` `.tar.gz` `.tgz` | Only forensic artifacts are extracted. Nested archives are expanded in place. Encrypted zips are tried with the usual forensic passwords. |
 | KAPE, Velociraptor, Cortex XDR, CyLR, UAC | Detected from their markers; the host name comes from the package. |
 | Directory | Mounted volume or already-extracted collection, Windows or Linux. |
+| Browser profiles | From images and packages: Chromium-family `Preferences`, `Secure Preferences` and extension manifests, Firefox `extensions.json`, enterprise policy files; caches are never copied. Linux: `~/.config/<browser>`, `~/.mozilla/firefox`, snap and flatpak paths, `/etc/*/policies/managed`. |
 | Single file | A hive (with its logs beside it), a systemd unit, a crontab, a shell profile. With `--carve`, any other file is scanned for hives (pagefile, hiberfil, memory dump, unallocated-space dump). |
 
 Hives are recognised by name **and** by header, so `bob_NTUSER.DAT`, `HOST-SOFTWARE`, `C_Windows_System32_config_SYSTEM`, `SOFTWARE.hve` or `artifact_0017.bin` all work.
@@ -212,6 +213,23 @@ Hives are recognised by name **and** by header, so `bob_NTUSER.DAT`, `HOST-SOFTW
 | | `get-aedebug` | AeDebug `Debugger` / `ReflectDebugger` | T1546 |
 | | `get-wer-fault-hangs` | WER Hangs debugger (HKLM and HKCU) | T1546 |
 | | `get-silent-process-exit` | `MonitorProcess` | T1546.012 |
+| **Policy and shell** | `get-policies-run` | `Policies\Explorer\Run` (HKLM, Wow6432Node, HKCU) | T1547.001 |
+| | `get-startup-folder-redirect` | `Shell Folders` / `User Shell Folders` pointing the Startup folder somewhere else | T1547.001 |
+| | `get-shell-service-object-delay-load` | `ShellServiceObjectDelayLoad` CLSIDs, resolved to their DLL | T1547 |
+| | `get-shell-extensions` | Browser Helper Objects, ShellExecuteHooks, icon overlays, `shellex` context-menu / property-sheet / copy-hook / drag-drop / column handlers, CLSIDs resolved | T1546.015 |
+| | `get-com-treat-as` | `CLSID\…\TreatAs` redirects | T1546.015 |
+| | `get-file-associations` | `exefile`, `batfile`, `txtfile`, `regfile`, `mscfile`, `ms-settings`, `Folder`… `shell\open\command` that is not the Windows default | T1546.001 |
+| | `get-gpo-scripts` | Group Policy startup / shutdown / logon / logoff scripts in the registry and in `scripts.ini` / `psscripts.ini` | T1037.001 |
+| | `get-office-addins` | Office add-ins with `LoadBehavior`, Outlook add-ins, Excel `OPEN` XLL/XLA entries; ProgID resolved to its DLL | T1137.006 |
+| | `get-browser-extensions` | Force-installed and external extensions from the registry (Chrome, Edge, Brave, Chromium, Firefox), and every extension in Chromium `Preferences` / `Secure Preferences` / manifests and Firefox `extensions.json`, with origin (store, policy, unpacked, sideloaded), install time and risky permissions | T1176 |
+| **Logon and credentials** | `get-security-providers` | `SecurityProviders` SSP DLLs beyond the defaults | T1547.005 |
+| | `get-winlogon-notify` | `Winlogon\Notify` packages | T1547.004 |
+| | `get-network-providers` | `NetworkProvider\Order` and each provider's DLL (credential interception) | T1556.008 |
+| | `get-credential-providers` | Credential providers, filters and PLAP providers whose DLL is not a Microsoft one | T1556 |
+| | `get-terminal-server-programs` | RDP `InitialProgram`, `StartupPrograms` | T1547 |
+| | `get-cor-profiler` | `COR_PROFILER` / `CORECLR_PROFILER` in the user and machine environment | T1574.012 |
+| | `get-service-failure-command` | `FailureCommand` of every service | T1543.003 |
+| | `get-safe-boot-alternate-shell` | SafeBoot `AlternateShell` | T1547 |
 | **Removed** | `get-deleted-persistence` | Keys and values recovered from freed hive cells, placed back on their path and matched against the locations above | |
 | | *(automatic on images)* | Items present in a Volume Shadow Copy but gone from the live volume | |
 | | *(`--carve`)* | Every technique above, run on hives carved from the raw bytes of the image and absent from the live registry | |
@@ -230,6 +248,7 @@ Hives are recognised by name **and** by header, so `bob_NTUSER.DAT`, `HOST-SOFTW
 | Kernel and libraries | `ld.so.preload`, `modules-load.d`, `modprobe.d` `install` commands, udev `RUN` actions |
 | Package manager | APT hooks |
 | Live state | processes running a deleted binary, execution from `/tmp` |
+| Browsers | Chromium and Firefox extensions per profile (origin, install time, risky permissions), policy force-installs |
 
 ## Output
 
@@ -293,7 +312,7 @@ The catalogue is in `src/errors.rs`: `1xxx` system, `2xxx` ingestion, `3xxx` Win
 cargo test
 ```
 
-1031 tests. The suite builds its own hives and transaction logs (a small regf/HvLE writer with real Marvin32 hashes), replays a real Windows 10 dirty hive and compares the result with `rla.exe` byte for byte, cross-checks deleted-cell recovery with `RECmd --recover`, runs a synthetic Cortex XDR package through the binary end to end, reads synthetic VHD, VHDX and VMDK images through the NTFS extractor, and carves hives out of synthetic disks with bad sectors, stalled reads, overwritten bins and copies cut by the end of the image. `scripts/carve_lab.ps1` builds a real NTFS volume on a Windows host (saved hives, a shadow copy, deletions with TRIM off) and `cargo test --test test_carve_lab -- --ignored` with `FARAMIR_CARVELAB` pointing at its output checks every carved hive against the clusters NTFS had given the file. `scripts/linux_collect.sh` makes a read-only UAC-style collection of a Linux host; the one taken from an Ubuntu 22.04 domain member is what the usr-merge deduplication, host-relative paths and timestamp format were corrected against. `scripts/linux_disk_lab.sh` builds, on a Linux host, a GPT+ext4 image and an MBR+LVM+ext4 image with one canary per technique (both ship as fixtures under `tests/fixtures/linux_disk/`) plus a 256 MB ext4 image of that host's real configuration for `cargo test --test test_linux_disk -- --ignored` with `FARAMIR_LINUXDISK`.
+1055 tests. The suite builds its own hives and transaction logs (a small regf/HvLE writer with real Marvin32 hashes), replays a real Windows 10 dirty hive and compares the result with `rla.exe` byte for byte, cross-checks deleted-cell recovery with `RECmd --recover`, runs a synthetic Cortex XDR package through the binary end to end, reads synthetic VHD, VHDX and VMDK images through the NTFS extractor, and carves hives out of synthetic disks with bad sectors, stalled reads, overwritten bins and copies cut by the end of the image, and checks the 17 techniques added after the IRFlow and Autoruns comparison (browser profiles and policy files included) against synthetic hives and trees. `scripts/carve_lab.ps1` builds a real NTFS volume on a Windows host (saved hives, a shadow copy, deletions with TRIM off) and `cargo test --test test_carve_lab -- --ignored` with `FARAMIR_CARVELAB` pointing at its output checks every carved hive against the clusters NTFS had given the file. `scripts/linux_collect.sh` makes a read-only UAC-style collection of a Linux host; the one taken from an Ubuntu 22.04 domain member is what the usr-merge deduplication, host-relative paths and timestamp format were corrected against. `scripts/linux_disk_lab.sh` builds, on a Linux host, a GPT+ext4 image and an MBR+LVM+ext4 image with one canary per technique (both ship as fixtures under `tests/fixtures/linux_disk/`) plus a 256 MB ext4 image of that host's real configuration for `cargo test --test test_linux_disk -- --ignored` with `FARAMIR_LINUXDISK`.
 
 ## Credits
 

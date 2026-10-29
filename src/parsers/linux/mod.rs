@@ -10,6 +10,7 @@ pub mod udev;
 pub mod modules;
 pub mod package_manager;
 pub mod autostart;
+pub mod browser;
 pub mod proc;
 
 use crate::event::Event;
@@ -210,6 +211,7 @@ pub fn process_linux_target(target: &Path, computer_name: &str) -> Vec<Event> {
     if target.is_file() {
         process_single_file(target, computer_name, &mut events);
     } else {
+        BROWSER_TREE_PASS.with(|b| b.set(true));
         for entry in WalkDir::new(target).into_iter().flatten() {
             let path = entry.path();
             if !path.is_file() {
@@ -217,10 +219,18 @@ pub fn process_linux_target(target: &Path, computer_name: &str) -> Vec<Event> {
             }
             process_single_file(path, computer_name, &mut events);
         }
+        BROWSER_TREE_PASS.with(|b| b.set(false));
+        events.extend(browser::events_for_tree(target, computer_name));
     }
 
     EVIDENCE_ROOT.with(|r| *r.borrow_mut() = None);
     dedupe_events(events)
+}
+
+thread_local! {
+    /// Set while a directory walk is in progress: browser files are then
+    /// handled by one tree pass instead of one call per file.
+    static BROWSER_TREE_PASS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 fn process_single_file(path: &Path, computer_name: &str, events: &mut Vec<Event>) {
@@ -336,6 +346,13 @@ fn process_single_file(path: &Path, computer_name: &str, events: &mut Vec<Event>
         if let Ok(ev) = autostart::parse_xdg_desktop_file(path, computer_name) {
             events.extend(ev);
         }
+    }
+
+    // 11b. Browser extensions (Chromium profiles, Firefox, policy files). A
+    //      directory walk handles them once per tree (see process_linux_target),
+    //      so a manifest can be folded into its Preferences entry.
+    else if browser::is_browser_file(path) && !BROWSER_TREE_PASS.with(|b| b.get()) {
+        events.extend(browser::parse_browser_file(path, computer_name));
     }
 
     // 12. Running processes & deleted binaries

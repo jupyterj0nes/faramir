@@ -137,6 +137,17 @@ pub fn is_relevant_artifact(entry_name: &str) -> bool {
         || file_name == "crontab"
         || file_name == "anacrontab"
         || file_name.ends_with("profile.ps1")
+        || file_name == "preferences"
+        || file_name == "secure preferences"
+        || file_name == "extensions.json"
+        || file_name == "external_extensions.json"
+        || file_name == "policies.json"
+        || file_name == "scripts.ini"
+        || file_name == "psscripts.ini"
+        || (file_name == "manifest.json" && lower.contains("/extensions/"))
+        || lower.contains("/policies/managed/")
+        || lower.contains("/start menu/programs/startup/")
+        || lower.contains("/grouppolicy/")
         || lower.contains("system32/tasks")
         || lower.contains("/tasks/")
         || lower.starts_with("tasks/")

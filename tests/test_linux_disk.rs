@@ -373,3 +373,18 @@ fn real_host_ext4_image_matches_the_uac_collection() {
     assert!(diag::snapshot().iter().all(|e| e.severity() != Severity::Error), "{:?}", diag::snapshot());
     let _ = Path::new(&dir);
 }
+
+#[test]
+fn browser_profiles_are_extracted_without_caches() {
+    let d = TempDir::new("lnxdisk_browser");
+    let (vol, events, _) = run_image(&d, "gpt_ext4.img");
+    assert!(vol.join("home/bob/.config/google-chrome/Default/Preferences").is_file());
+    assert!(vol.join("home/bob/.config/google-chrome/Default/Extensions/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/2.0_0/manifest.json").is_file());
+    assert!(!vol.join("home/bob/.config/google-chrome/Default/Cache").exists(), "caches are never copied");
+    assert!(vol.join("home/bob/.mozilla/firefox/lab.default/extensions.json").is_file());
+    assert!(vol.join("etc/opt/chrome/policies/managed/lab.json").is_file());
+    let br: Vec<_> = events.iter().filter(|e| e.artifact.starts_with("linux:browser:")).collect();
+    assert_eq!(br.len(), 5, "{br:?}");
+    assert_eq!(br.iter().filter(|e| e.artifact == "linux:browser:extension_forced").count(), 2);
+    assert_eq!(br.iter().filter(|e| e.commandline.as_deref().unwrap().contains("Lab Loader")).count(), 1, "a listed extension's manifest is not a second row");
+}
