@@ -171,8 +171,9 @@ struct Args {
     carve: bool,
 
     /// Baseline date: rows written before it are what the machine looked like
-    /// when it was trusted; rows after it are tested against them and get
-    /// "review" when nothing else is said about them. YYYY-MM-DD[ HH:MM[:SS]].
+    /// when it was trusted (`baseline`); rows after it are tested against them
+    /// and are `candidate` when nothing else is said about them.
+    /// YYYY-MM-DD[ HH:MM[:SS]]. `--investigation-from` is masstin's name for it.
     #[arg(long = "baseline", visible_alias = "investigation-from", value_name = "DATE")]
     baseline: Option<String>,
 
