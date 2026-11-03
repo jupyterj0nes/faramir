@@ -31,6 +31,7 @@
 
 pub mod known_good;
 pub mod marks;
+pub mod measured;
 pub mod normalize;
 pub mod rarity;
 pub mod rules;
@@ -139,7 +140,8 @@ pub fn rarity_points(q: f64) -> f64 {
 /// The evidence a row carries, for the score.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Evidence {
-    /// Rule points, [`Level::points`] summed.
+    /// Rule points: the measured rarity of every rule that counts on the
+    /// row's system ([`measured::points`]), summed.
     pub rule_points: u32,
     pub tested: bool,
     pub q: f64,
@@ -147,13 +149,14 @@ pub struct Evidence {
 
 /// `hunt_score`, masstin's definition: −10·log10 of how rare the row is,
 /// rounded, 0 to 100. The statistical test gives its q-value; every rule
-/// that fired adds its own points in the same unit ([`Level::points`]:
-/// high 90, medium 20, low 10), since independent evidence adds in log
-/// space. A reference row (`habitual`, `baseline`) is 0: p = 1, not judged.
+/// that fired adds the rarity measured for it on clean rows of the row's
+/// system ([`measured`]), since independent evidence adds in log space. A
+/// reference row (`habitual`, `baseline`) is 0: p = 1, not judged.
 ///
 /// Read as masstin reads it: 0 no rarer than chance, 13 one in twenty (the
-/// default alpha), 20 one in a hundred, 30 one in a thousand, 60 one in a
-/// million, 90 one in a thousand million (a high rule), 100 the cap.
+/// default alpha), 20 one in a hundred, 29 a rule that never fired on the
+/// reference (the bound 750 rows give), 30 one in a thousand, 60 one in a
+/// million, 100 the cap.
 pub fn score_for(hunt: Hunt, e: &Evidence) -> u8 {
     match hunt {
         Hunt::Habitual | Hunt::Baseline | Hunt::None => 0,
@@ -295,11 +298,16 @@ pub fn evaluate(events: &[Event], settings: &HuntSettings) -> (Vec<Verdict>, Hun
     for (i, row) in rows.iter().enumerate() {
         let mut reasons: Vec<String> = Vec::new();
         let mut points: u32 = 0;
-        // strongest rule first; catalogue order within a level
+        // strongest rule first; catalogue order within a level. A rule measured
+        // common on this system is noise: its clause stays, it adds no points
+        // and does not speak for the state.
         let mut fired = matched[i].clone();
         fired.sort_by_key(|r| std::cmp::Reverse(r.level));
+        let counting: Vec<&'static Rule> = fired.iter().copied().filter(|r| measured::counts(r.id, row.os)).collect();
+        for rule in &counting {
+            points += measured::points(rule.id, row.os);
+        }
         for rule in &fired {
-            points += rule.level.points();
             reasons.push(format!("rule {} ({}): {} [{}]", rule.id, rule.level.label(), rule.title, rule.attack));
         }
         let mut ev = Evidence { rule_points: points, ..Default::default() };
@@ -322,17 +330,21 @@ pub fn evaluate(events: &[Event], settings: &HuntSettings) -> (Vec<Verdict>, Hun
         };
         // what the rules say: a high rule is `significant` whatever vouches
         // for the entry; a medium rule is `candidate` unless the entry is
-        // stock or known good; a low rule changes nothing
-        let by_rule = match fired.first().map(|r| r.level) {
+        // stock or known good; a low rule leaves the test's state alone, and
+        // on a row no test judged it gives `candidate`, so a score never comes
+        // without a state
+        let strongest = counting.first().map(|r| r.level);
+        let by_rule = match strongest {
             Some(Level::High) => Some(Hunt::Significant),
             Some(Level::Medium) if !vouched => Some(Hunt::Candidate),
+            Some(Level::Low) if !vouched && by_test == Hunt::NotEvaluated => Some(Hunt::Candidate),
             _ => None,
         };
         // the stronger state wins
         let hunt = by_rule.map_or(by_test, |r| r.max(by_test));
-        match by_rule {
-            Some(Hunt::Significant) => report.rule_high += 1,
-            Some(Hunt::Candidate) => report.rule_medium += 1,
+        match (strongest, by_rule) {
+            (Some(Level::High), _) => report.rule_high += 1,
+            (Some(Level::Medium), Some(Hunt::Candidate)) => report.rule_medium += 1,
             _ => {}
         }
         let q = if st.tested {
@@ -423,6 +435,7 @@ pub fn evaluate(events: &[Event], settings: &HuntSettings) -> (Vec<Verdict>, Hun
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::normalize::Os;
 
     fn ev(host: &str, artifact: &str, cmd: &str, ts: &str) -> Event {
         Event {
@@ -513,11 +526,11 @@ mod tests {
         assert_eq!(score_for(Hunt::Candidate, &e(0, true, 0.2)), 7);
         assert_eq!(score_for(Hunt::Candidate, &e(0, true, 1.0)), 0);
         assert_eq!(score_for(Hunt::Candidate, &e(0, false, 1.0)), 0, "deleted, nothing else: nothing to say in numbers");
-        // the rules alone
-        assert_eq!(score_for(Hunt::Significant, &e(Level::High.points(), false, 1.0)), 90);
-        assert_eq!(score_for(Hunt::Candidate, &e(Level::Medium.points(), false, 1.0)), 20);
-        assert_eq!(score_for(Hunt::Candidate, &e(Level::Low.points(), false, 1.0)), 10);
-        assert_eq!(score_for(Hunt::NotEvaluated, &e(Level::Low.points(), false, 1.0)), 10);
+        // the rules alone: their measured points, whatever the level
+        assert_eq!(score_for(Hunt::Significant, &e(29, false, 1.0)), 29);
+        assert_eq!(score_for(Hunt::Candidate, &e(24, false, 1.0)), 24);
+        assert_eq!(score_for(Hunt::Candidate, &e(10, false, 1.0)), 10);
+        assert_eq!(score_for(Hunt::NotEvaluated, &e(10, false, 1.0)), 10);
         // both add, in log space, and cap at 100
         assert_eq!(score_for(Hunt::Significant, &e(90, true, 0.05)), 100);
         assert_eq!(score_for(Hunt::Significant, &e(90 + 20 + 10, false, 1.0)), 100);
@@ -527,9 +540,9 @@ mod tests {
         for h in [Hunt::Habitual, Hunt::Baseline, Hunt::None] {
             assert_eq!(score_for(h, &e(90, true, 0.001)), 0, "{h:?}");
         }
-        // one high rule is never below 90, one medium never below 20
-        assert!(score_for(Hunt::Significant, &e(Level::High.points(), true, 1.0)) >= 90);
-        assert!(score_for(Hunt::Candidate, &e(Level::Medium.points(), true, 1.0)) >= 20);
+        // a rule's points survive a test with q = 1
+        assert_eq!(score_for(Hunt::Significant, &e(29, true, 1.0)), 29);
+        assert_eq!(score_for(Hunt::Candidate, &e(24, true, 1.0)), 24);
     }
 
     #[test]
@@ -545,7 +558,7 @@ mod tests {
         ];
         let (v, r) = evaluate(&events, &HuntSettings { baseline: Some(b), ..Default::default() });
         assert_eq!(v[0].hunt, Hunt::Significant, "a high rule writes significant");
-        assert!(v[0].score >= 90);
+        assert!(v[0].score >= 29, "H1001 never fired on the Windows reference: the bound it gives: {:?}", v[0]);
         assert!(v[0].reasons[0].starts_with("rule H1001 (high): "), "{:?}", v[0].reasons);
         let why = v[0].hunt_why();
         assert!(why.ends_with("; written after the baseline"), "{why}");
@@ -560,7 +573,7 @@ mod tests {
         assert_eq!(v[3].hunt, Hunt::Baseline, "{:?}", v[3]);
         assert_eq!(v[3].score, 0);
         assert!(v[2].score < 13, "candidate, q above alpha: {:?}", v[2]);
-        assert_eq!(v[4].score, 10, "deleted: the low rule H3014, nothing else: {:?}", v[4]);
+        assert_eq!(v[4].score, measured::points("H3014", Os::Windows) as u8, "deleted: the low rule H3014, its measured points: {:?}", v[4]);
         assert!(v[3].reasons.iter().any(|x| x == "before the baseline"));
         assert_eq!(v[4].hunt, Hunt::Candidate);
         assert!(v[4].reasons.iter().any(|x| x == "deleted"));
@@ -584,22 +597,32 @@ mod tests {
         assert_eq!(v[0].hunt, Hunt::Significant, "{:?}", v[0]);
         assert!(v[0].reasons[0].starts_with("rule H1009 (high): "), "strongest rule first: {:?}", v[0].reasons);
         assert!(v[0].reasons[1].starts_with("rule H") && v[0].reasons[1].contains(" (medium): "), "{:?}", v[0].reasons);
-        assert_eq!(v[0].score, 100);
+        let ids: Vec<String> = v[0].reasons.iter().filter_map(|r| r.strip_prefix("rule ")).map(|r| r.split(' ').next().unwrap().to_string()).collect();
+        assert!(ids.len() >= 3, "{ids:?}");
+        let expected: u32 = ids.iter().map(|id| measured::points(id, Os::Windows)).sum();
+        assert_eq!(v[0].score as u32, expected.min(100), "{ids:?}");
         assert_eq!(r.rule_high, 1);
-        // a medium rule alone: candidate, 20 points
+        // a medium rule alone: candidate, its measured points
         let events = vec![ev("H", "windows:persistence:registry_run_key", "\"C:\\Program Files (x86)\\AnyDesk\\AnyDesk.exe\" --tray", "2026-10-28 12:00:00.000")];
         let (v, r) = evaluate(&events, &HuntSettings::default());
         assert_eq!(v[0].hunt, Hunt::Candidate, "a medium rule writes candidate: {:?}", v[0]);
-        assert_eq!(v[0].score, 20);
+        assert_eq!(v[0].score as u32, measured::points("H3008", Os::Windows));
         assert!(v[0].hunt_why().starts_with("rule H3008 (medium): "), "{}", v[0].hunt_why());
         assert_eq!(r.rule_medium, 1);
-        // a low rule alone leaves the statistical state as it is: one host, no baseline -> not evaluated, 10 points
+        // a low rule alone on a row no test judged (one host, no baseline): candidate, its measured points
         let events = vec![ev("H", "windows:persistence:registry_run_key", "C:\\updater.exe", "2026-10-28 12:00:00.000")];
         let (v, r) = evaluate(&events, &HuntSettings::default());
-        assert_eq!(v[0].hunt, Hunt::NotEvaluated, "{:?}", v[0]);
-        assert_eq!(v[0].score, 10);
-        assert_eq!(v[0].hunt_why(), "rule H3015 (low): Image in the drive root [T1036]; not evaluated: one host and no baseline");
-        assert_eq!(r.rule_high + r.rule_medium, 0);
+        assert_eq!(v[0].hunt, Hunt::Candidate, "{:?}", v[0]);
+        assert_eq!(v[0].score as u32, measured::points("H3015", Os::Windows));
+        assert!(v[0].hunt_why().starts_with("rule H3015 (low): Image in the drive root [T1036]"), "{}", v[0].hunt_why());
+        assert_eq!(r.rule_high + r.rule_medium, 0, "a low rule is neither");
+        // a rule measured common on the system is noise: no state, no points, its clause
+        let events = vec![ev("H", "windows:persistence:windows_service", "\"C:\\Program Files\\Vendor\\svc.exe\" @%SystemRoot%\\system32\\x.dll,-100", "2026-10-28 12:00:00.000")];
+        let (v, _) = evaluate(&events, &HuntSettings::default());
+        if v[0].reasons.iter().any(|x| x.starts_with("rule H1011 ")) {
+            assert_eq!(v[0].hunt, Hunt::NotEvaluated, "H1011 fires on 290 of 748 clean service rows: {:?}", v[0]);
+            assert_eq!(v[0].score, 0, "{:?}", v[0]);
+        }
         // a medium rule on a stock entry: stock vouches for it, habitual, 0
         let events = vec![ev("H", "windows:persistence:registry_run_key", "C:\\Windows\\system32\\SecurityHealthSystray.exe", "2026-10-28 12:00:00.000")];
         let (v, _) = evaluate(&events, &HuntSettings::default());
@@ -625,8 +648,9 @@ mod tests {
         let last = v.last().unwrap();
         // one low rule (random name) is not enough for suspicious; the statistics make it significant
         assert_eq!(last.hunt, Hunt::Significant, "{:?}", last);
-        assert!(last.score >= 23, "one low rule (10) and q <= alpha (13 or more): {:?}", last);
-        assert_eq!(last.score as f64, (rarity_points(last.q.unwrap()) + 10.0).round(), "{:?}", last);
+        let low = measured::points("H3013", Os::Windows) as f64;
+        assert!(last.score as f64 >= low + 13.0, "one low rule ({low}) and q <= alpha (13 or more): {:?}", last);
+        assert_eq!(last.score as f64, (rarity_points(last.q.unwrap()) + low).round(), "{:?}", last);
         assert!(last.q.is_some_and(|q| q <= 0.05), "{:?}", last);
         assert!(last.reasons[0].starts_with("rule H3013 (low): "), "the rule's clause first: {:?}", last.reasons);
         assert!(last.reasons[1].starts_with("rare among "), "then the test's, in words: {:?}", last.reasons);

@@ -15,23 +15,10 @@ pub enum Level {
 }
 
 impl Level {
-    /// Evidence in masstin's unit, −10·log10 of how often a benign row
-    /// matches: ten points are one order of magnitude.
-    ///
-    /// * High, 90: the admission criterion of the level is that the pattern
-    ///   has no benign reading (a reverse shell, `mshta http://`, a system
-    ///   binary name outside its folder), so it is claimed at one in a
-    ///   thousand million. On the stock rows measured it fired on none.
-    /// * Medium, 20: one in a hundred. Measured one in 190 on a stock host.
-    /// * Low, 10: one in ten. Measured one in 128.
-    pub fn points(self) -> u32 {
-        match self {
-            Level::High => 90,
-            Level::Medium => 20,
-            Level::Low => 10,
-        }
-    }
-
+    /// The level is the author's claim about the pattern and decides the
+    /// state a rule gives (`significant`, `candidate`); what the rule adds to
+    /// `hunt_score` is measured per rule and per system in
+    /// [`super::measured`], never taken from the level.
     pub fn label(self) -> &'static str {
         match self {
             Level::High => "high",

@@ -269,20 +269,21 @@ Every row gets a state in `hunt`: the same column, in the same place, with the s
 | `not_evaluated` | No test could be made (one host and no baseline, or no other row of the technique to compare with) and no rule fired. |
 | empty | `--no-hunt`. |
 
-`hunt_score` is masstin's number, with the same meaning: how rare the row is, as −10·log10 of a probability, rounded and capped at 100, so ten points are one order of magnitude. The statistical test contributes −10·log10(q); every rule that fired adds its own points in the same unit, since independent evidence adds in log space; a reference row (`habitual`, `baseline`) is 0.
+`hunt_score` is masstin's number, with the same meaning: how rare the row is, as −10·log10 of a probability, rounded and capped at 100, so ten points are one order of magnitude. The statistical test contributes −10·log10(q). Every rule that fired adds its own points in the same unit, since independent evidence adds in log space, and those points are **measured, not chosen**: the share of clean reference rows of the row's system the rule's pattern fires on (`src/hunt/measured.rs` holds the tables and the two references: the SYSTEM and user hives of a Windows Server lab host recovered from memory, 748 rows; the UAC collection of an Ubuntu lab host, 761 rows). A pattern that never fired on the reference is not "never": it gets the bound the corpus gives, one in `rows + 1`, 29 points on either. A rule measured below 10 points fires on more than one clean row in ten: noise on that system, it gives neither state nor points, only its clause (`H1011`, the service-DLL rule, fires on 290 of the 748 Windows reference rows and is worth 4 there). The level of a rule stays the author's claim and decides the state; the measurement decides the points. A reference row (`habitual`, `baseline`) is 0.
 
 | Points | Read as | Where it comes from |
 |---|---|---|
-| 0 | no rarer than chance | habitual, baseline, a tested row with q = 1 |
-| 10 | one in ten | a low rule (measured one in 128 on a stock host) |
+| 0 | no rarer than chance | habitual, baseline, a tested row with q = 1, a rule measured common |
 | 13 | one in twenty | q = 0.05, the default alpha: `significant` starts here |
-| 20 | one in a hundred | a medium rule (measured one in 190), or q = 0.01 |
-| 30 | one in a thousand | q = 0.001, or a medium and a low |
+| 20 | one in a hundred | q = 0.01 |
+| 23 to 26 | one in two hundred to one in four hundred | the rules that fired on a few reference rows (`H3013` 4 of 761 on Linux, 2 of 748 on Windows; `H2008` 3 of 761; `H1004`, `H1012` 3 of 748) |
+| 29 | one in seven hundred and fifty | a rule that never fired on the reference: the bound 750 rows give |
+| 30 | one in a thousand | q = 0.001 |
+| 58 | | two rules that never fired, on one row |
 | 60 | one in a million | q = 10⁻⁶ |
-| 90 | one in a thousand million | a high rule: the level's admission criterion is that the pattern has no benign reading (on the stock rows measured, none fired) |
-| 100 | the cap | a high rule with anything else, or q ≤ 10⁻¹⁰ |
+| 100 | the cap | four such rules, or q ≤ 10⁻¹⁰ |
 
-`hunt_score >= 30` keeps what is rarer than one in a thousand, in masstin's timeline and in this one alike. A row made `significant` by a high rule is 90 or more; one made `candidate` by a medium rule, 20 or more; a `significant` row from the test alone starts at 13 (the default alpha) and grows with its rarity; a low rule adds 10 and leaves the state alone.
+`hunt_score >= 30` keeps what is rarer than one in a thousand, in masstin's timeline and in this one alike. A row made `significant` or `candidate` by a rule carries that rule's measured points, 29 when the pattern never fired on the reference; a larger clean corpus would raise that bound; a `significant` row from the test alone starts at 13 (the default alpha) and grows with its rarity; a low rule adds 10 and leaves the state alone.
 
 `hunt_why` says which spoke. A rule's clause starts with its id and level, then the title and the ATT&CK technique: `rule H1001 (high): LOLBin fetching remote content [T1218]`. The test's clause is in words, with the exact p and q: `rare among 1200 windows_service row(s) (p=0.001, q=0.025): on 1 of 40 hosts, folder: ProgramData (1 of 1200), name: hex-like name (1 of 1200)`. So are the rest: `stock Windows entry`, `in known-good CSV`, `before the baseline`, `on 40 of 40 hosts`, `written after the baseline`, `deleted`. Rules first, strongest first, then the words, `; ` between. A reader that wants only the rules filters `hunt_why` on `rule `; one that wants only the statistics, on its absence. `verdict` (`suspicious`, `confirmed`, `benign`) and `notes` are the analyst's: faramir leaves them empty and `--carry-marks` brings them back from an earlier CSV of the same evidence.
 
