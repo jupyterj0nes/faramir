@@ -7,7 +7,8 @@
 //! **measured, not chosen**: the share of clean reference rows of the row's
 //! system its pattern fires on, `-10 · log10(hits / rows)`. A pattern that
 //! never fired is not "never": the corpus bounds what it can say, so it gets
-//! `-10 · log10(1 / (rows + 1))`, 29 points on either reference below. A
+//! `-10 · log10(1 / (rows + 1))`, 33 points on the Windows reference below,
+//! 29 on the Linux one. A
 //! rule measured below [`NOISE_BELOW`] points fires on more than one clean
 //! row in ten: noise on that system, it gives no state and no points, only
 //! its clause in `hunt_why`. The level of a rule (high, medium, low) stays
@@ -25,12 +26,18 @@ use super::normalize::Os;
 /// A rule measured below this many points is noise on that system.
 pub const NOISE_BELOW: u32 = 10;
 
-/// The Windows reference: the SYSTEM and user hives recovered from the
-/// memory image of DEV-SRV01 (Windows Server, RangeForge lab, 2026-10-29),
-/// mounted as a volume: services, service DLLs, service failure commands,
-/// LSA packages and boot execute. Nothing the lab planted among them.
-pub const REFERENCE_WINDOWS: &str = "DEV-SRV01 SYSTEM and NTUSER hives from memory, 2026-10-29";
-pub const ROWS_WINDOWS: u32 = 748;
+/// The Windows reference: two clean Windows Server 2016 hosts of the
+/// RangeForge lab, a member server (SQL Server Express, IIS) and a domain
+/// controller, collected live on 2026-11-03 and laid out as a volume:
+/// SYSTEM, SOFTWARE, SAM, SECURITY, DEFAULT, Amcache, every NTUSER.DAT and
+/// UsrClass.dat, the Tasks folder, the Startup folders. 2,004 rows:
+/// services, service DLLs, scheduled tasks (live and deleted), Group Policy
+/// extension DLLs, shell extensions, netsh helpers, COM TreatAs, App Paths,
+/// Active Setup, credential providers, failure commands, Office add-ins,
+/// AeDebug, hhctrl, Winlogon, LSA, boot execute. The one task the lab
+/// planted (its beacon) is left out.
+pub const REFERENCE_WINDOWS: &str = "PTR-SRV01 and PTR-DC01, Windows Server 2016, live collection 2026-11-03, the lab's beacon task left out";
+pub const ROWS_WINDOWS: u32 = 2_003;
 
 /// The Linux reference: the UAC collection of LEO-LNX01 (Ubuntu, RangeForge
 /// lab, 2026-10-28, `samples/linuxlab`): systemd units, timers, sockets,
@@ -41,7 +48,18 @@ pub const ROWS_LINUX: u32 = 761;
 
 /// Rows of the Windows reference each rule fired on. A rule not listed
 /// never fired there.
-pub const MEASURED_WINDOWS: &[(&str, u32)] = &[("H1004", 3), ("H1011", 290), ("H1012", 3), ("H3013", 2)];
+pub const MEASURED_WINDOWS: &[(&str, u32)] = &[
+    ("H1004", 2),
+    ("H1006", 4),
+    ("H1011", 4),
+    ("H1012", 10),
+    ("H1015", 6),
+    ("H3002", 6),
+    ("H3006", 2),
+    ("H3013", 17),
+    ("H3014", 19),
+    ("H3015", 4),
+];
 
 /// Rows of the Linux reference each rule fired on. A rule not listed never
 /// fired there.
@@ -86,9 +104,10 @@ mod tests {
     fn scale_follows_masstin() {
         assert_eq!(points_for(1, 128), 21);
         assert_eq!(points_for(1, 1_000), 30);
-        assert_eq!(points_for(0, 748), 29, "never fired: the bound 748 rows give");
+        assert_eq!(points_for(0, 2_003), 33, "never fired: the bound 2,003 rows give");
         assert_eq!(points_for(0, 761), 29);
-        assert_eq!(points_for(290, 748), 4, "H1011 on the Windows reference: noise");
+        assert_eq!(points_for(290, 748), 4, "a rule that fires on four clean rows in ten would be noise");
+        assert_eq!(points_for(19, 2_003), 20, "H3014, the most common pattern on the Windows reference, still counts");
         assert_eq!(points_for(1_000, 1_000), 0);
         assert_eq!(points_for(0, 0), 0);
     }
@@ -103,13 +122,17 @@ mod tests {
                 assert!(w[0].0 < w[1].0, "{} before {}", w[0].0, w[1].0);
             }
         }
-        assert_eq!(points("H1011", Os::Windows), 4);
-        assert!(!counts("H1011", Os::Windows));
-        assert_eq!(points("H1001", Os::Windows), 29);
+        assert_eq!(points("H1011", Os::Windows), 27);
+        assert!(counts("H1011", Os::Windows));
+        assert_eq!(points("H1001", Os::Windows), 33);
         assert!(counts("H1001", Os::Windows));
-        assert_eq!(points("H3013", Os::Windows), 26);
+        assert_eq!(points("H1001", Os::Linux), 29);
+        assert_eq!(points("H3013", Os::Windows), 21);
         assert_eq!(points("H3013", Os::Linux), 23);
-        assert_eq!(points("H3013", Os::Unknown), 23);
+        assert_eq!(points("H3013", Os::Unknown), 21);
         assert_eq!(points("H2008", Os::Linux), 24);
+        for (id, hits) in MEASURED_WINDOWS {
+            assert!(points_for(*hits, ROWS_WINDOWS) >= NOISE_BELOW, "{id} is not noise on the Windows reference");
+        }
     }
 }

@@ -209,10 +209,10 @@ fn every_hive_is_discovered_and_recovered_when_logs_sit_in_other_entries() {
 
     let all = run_all(&mut set, &root);
     let values: Vec<&str> = all.iter().map(|p| p.value.as_str()).collect();
-    for expected in [r"C:\ProgramData\updater.exe", r"C:\ProgramData\stub.exe", r"C:\Users\bob\bob.exe", r"C:\Users\alice\alice.exe", r"C:\Users\bob\com.dll", r"C:\Windows\Temp\task.exe", "EvilSvc"] {
+    for expected in [r"C:\ProgramData\updater.exe", r"C:\ProgramData\stub.exe", r"C:\Users\bob\bob.exe", r"C:\Users\alice\alice.exe", r"C:\Users\bob\com.dll", r"C:\Windows\Temp\task.exe", r"C:\Windows\Temp\evilsvc.exe"] {
         assert!(values.contains(&expected), "missing {expected}: {values:?}");
     }
-    assert!(all.iter().any(|p| p.path == r"C:\Windows\Temp\evilsvc.exe"));
+    assert!(all.iter().any(|p| p.value == r"C:\Windows\Temp\evilsvc.exe" && p.path.contains("EvilSvc")), "{all:?}");
 
     for idx in 0..set.len() {
         let info = set.info(idx).unwrap().clone();

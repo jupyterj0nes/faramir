@@ -195,8 +195,8 @@ fn aedebug_direct_value_and_subkeys() {
     let mut set = set_with(&d, &[("SOFTWARE", &sw)]);
     let p = run(TechniqueId::AeDebug, &mut set);
     assert_eq!(p.len(), 2);
-    assert!(p.iter().any(|x| x.path.contains(r"C:\evil\dbg.exe")));
-    assert!(p.iter().all(|x| x.value == "AeDebug"));
+    assert!(p.iter().any(|x| x.value == r"C:\evil\dbg.exe -p %ld" && x.path.ends_with(r"AeDebug\Debugger")), "{p:?}");
+    assert!(p.iter().any(|x| x.value == "y" && x.path.ends_with(r"AeDebug\Sub\X")), "{p:?}");
 }
 
 #[test]
@@ -244,7 +244,9 @@ fn cmd_autorun_user_and_system() {
     let mut a = accesses(&p);
     a.sort();
     assert_eq!(a, vec!["System", "User"]);
-    assert!(p.iter().all(|x| x.value == "CmdAutoRun"));
+    assert!(p.iter().all(|x| x.path.ends_with(r"Command Processor\AutoRun")), "{p:?}");
+    assert!(p.iter().any(|x| x.value == r"C:\s.bat" && x.access_gained == "System"), "{p:?}");
+    assert!(p.iter().any(|x| x.value == r"C:\u.bat" && x.access_gained == "User"), "{p:?}");
 }
 
 #[test]
@@ -257,8 +259,8 @@ fn explorer_load_and_run_values() {
     let mut set = set_with(&d, &[("NTUSER.DAT", &nt)]);
     let p = run(TechniqueId::ExplorerLoad, &mut set);
     assert_eq!(p.len(), 2);
-    assert!(p.iter().any(|x| x.path.contains("Name: Load")));
-    assert!(p.iter().any(|x| x.path.contains("Name: Run")));
+    assert!(p.iter().any(|x| x.value == r"C:\l.exe" && x.path.ends_with(r"CurrentVersion\Windows\Load")), "{p:?}");
+    assert!(p.iter().any(|x| x.value == r"C:\r.exe" && x.path.ends_with(r"CurrentVersion\Windows\Run")), "{p:?}");
     assert_eq!(accesses(&p), vec!["User", "User"]);
 }
 
@@ -275,8 +277,8 @@ fn winlogon_userinit_shell_mpnotify() {
 
     let u = run(TechniqueId::WinlogonUserinit, &mut set);
     assert_eq!(u.len(), 1);
-    assert!(u[0].path.contains(r"C:\evil.exe"));
-    assert_eq!(u[0].value, "WinLogonUserInit");
+    assert!(u[0].value.contains(r"C:\evil.exe"), "{u:?}");
+    assert!(u[0].path.ends_with(r"Winlogon\Userinit"), "{u:?}");
 
     let s = run(TechniqueId::WinlogonShell, &mut set);
     assert_eq!(s.len(), 2, "HKLM and HKCU Shell");
@@ -286,7 +288,7 @@ fn winlogon_userinit_shell_mpnotify() {
 
     let m = run(TechniqueId::WinlogonMpNotify, &mut set);
     assert_eq!(m.len(), 1);
-    assert!(m[0].path.contains(r"C:\mp.exe"));
+    assert!(m[0].value.contains(r"C:\mp.exe") && m[0].path.ends_with(r"Winlogon\mpnotify"), "{m:?}");
 }
 
 #[test]
@@ -327,8 +329,8 @@ fn app_cert_dlls_from_control_set() {
     let mut set = set_with(&d, &[("SYSTEM", &sys)]);
     let p = run(TechniqueId::AppCertDlls, &mut set);
     assert_eq!(p.len(), 1);
-    assert!(p[0].path.contains(r"C:\ac.dll"));
-    assert_eq!(p[0].value, "AppCertDlls");
+    assert_eq!(p[0].value, r"C:\ac.dll");
+    assert_eq!(p[0].path, r"Control\Session Manager\AppCertDlls\evil");
 }
 
 #[test]
@@ -342,10 +344,10 @@ fn app_paths_user_system_and_wow() {
     let mut set = set_with(&d, &[("SOFTWARE", &sw), ("NTUSER.DAT", &nt)]);
     let p = run(TechniqueId::AppPaths, &mut set);
     assert_eq!(p.len(), 3);
-    let mut names = values(&p);
-    names.sort();
-    assert_eq!(names, vec!["evil.exe", "u.exe", "w.exe"]);
-    assert!(p.iter().any(|x| x.path == r"C:\u.exe" && x.access_gained == "User"));
+    let mut exes = values(&p);
+    exes.sort();
+    assert_eq!(exes, vec![r"C:\e.exe", r"C:\u.exe", r"C:\w.exe"]);
+    assert!(p.iter().any(|x| x.value == r"C:\u.exe" && x.path.ends_with(r"App Paths\u.exe") && x.access_gained == "User"), "{p:?}");
 }
 
 #[test]
@@ -356,9 +358,11 @@ fn service_dlls_direct_and_parameters() {
         .sz(r"ControlSet001\Services\SvcB\Parameters", "ServiceDll", r"C:\b.dll")
         .sz(r"ControlSet001\Services\SvcC", "ImagePath", r"C:\c.exe");
     let mut set = set_with(&d, &[("SYSTEM", &sys)]);
-    let mut v: Vec<String> = run(TechniqueId::ServiceDlls, &mut set).iter().map(|p| p.path.clone()).collect();
+    let p = run(TechniqueId::ServiceDlls, &mut set);
+    let mut v: Vec<String> = p.iter().map(|p| p.value.clone()).collect();
     v.sort();
     assert_eq!(v, vec![r"C:\a.dll", r"C:\b.dll"]);
+    assert!(p.iter().any(|p| p.path == r"Services\SvcB"), "{p:?}");
 }
 
 #[test]
@@ -372,8 +376,8 @@ fn windows_services_image_paths_exclude_dll_hosted() {
     let mut set = set_with(&d, &[("SYSTEM", &sys)]);
     let p = run(TechniqueId::WindowsServices, &mut set);
     assert_eq!(p.len(), 1);
-    assert_eq!(p[0].path, r"C:\c.exe");
-    assert_eq!(p[0].value, "Evil C");
+    assert_eq!(p[0].value, r"C:\c.exe");
+    assert_eq!(p[0].path, r"Services\SvcC (Evil C)");
 }
 
 #[test]
@@ -384,7 +388,8 @@ fn gp_extension_dlls() {
     let mut set = set_with(&d, &[("SOFTWARE", &sw)]);
     let p = run(TechniqueId::GpExtensionDlls, &mut set);
     assert_eq!(p.len(), 1);
-    assert_eq!(p[0].path, r"C:\gp.dll");
+    assert_eq!(p[0].value, r"C:\gp.dll");
+    assert!(p[0].path.ends_with(r"GPExtensions\{guid}"), "{p:?}");
 }
 
 #[test]
@@ -397,8 +402,8 @@ fn chm_helper_dll_user_and_system() {
     let mut set = set_with(&d, &[("NTUSER.DAT", &nt), ("SOFTWARE", &sw)]);
     let p = run(TechniqueId::ChmHelperDll, &mut set);
     assert_eq!(p.len(), 2);
-    assert!(p.iter().any(|x| x.path.contains(r"C:\u.dll") && x.access_gained == "User"));
-    assert!(p.iter().any(|x| x.path.contains(r"C:\s.dll") && x.access_gained == "System"));
+    assert!(p.iter().any(|x| x.value == r"C:\u.dll" && x.path.ends_with(r"HtmlHelp Author\Location") && x.access_gained == "User"), "{p:?}");
+    assert!(p.iter().any(|x| x.value == r"C:\s.dll" && x.access_gained == "System"), "{p:?}");
 }
 
 #[test]
@@ -586,7 +591,7 @@ fn scheduled_tasks_registry_and_xml() {
     diag::clear();
     let p = run_technique(TechniqueId::ScheduledTasks, &mut set, Some(&d.path));
     assert_eq!(p.len(), 2);
-    assert!(p.iter().any(|x| x.technique == "Scheduled Task" && x.path == r"\Microsoft\Windows\Evil\Task"));
+    assert!(p.iter().any(|x| x.technique == "Scheduled Task" && x.value == r"\Microsoft\Windows\Evil\Task" && x.path.contains(r"TaskCache\Tasks\")), "{p:?}");
     assert!(p.iter().any(|x| x.technique == "Scheduled Task (XML)" && x.value == r"C:\evil.exe -x"));
     assert!(diag::has("ERR_WIN_TASK_XML_PARSE"));
 }
@@ -806,10 +811,11 @@ fn run_all_covers_every_hive_kind_and_technique() {
     diag::clear();
     let all = run_all(&mut set, &d.path);
     let v = values(&all);
-    for expected in [r"C:\s.exe", r"C:\as.exe", r"C:\h.dll", "badpkg", r"C:\scr.scr", r"C:\com.dll", r"C:\hh.dll", "Startup Folder"] {
+    for expected in [r"C:\s.exe", r"C:\as.exe", r"C:\h.dll", "badpkg", r"C:\scr.scr", r"C:\com.dll", r"C:\hh.dll"] {
         assert!(v.contains(&expected.to_string()), "missing {expected} in {v:?}");
     }
-    assert!(all.iter().any(|p| p.path == r"C:\svc.exe"));
+    assert!(v.iter().any(|x| x.ends_with("x.lnk")), "the Startup folder entry is the file: {v:?}");
+    assert!(all.iter().any(|p| p.value == r"C:\svc.exe" && p.path.starts_with(r"Services\")), "{all:?}");
     assert!(!diag::has("ERR_WIN_TECH_PANIC"));
     assert!(!diag::has("ERR_WIN_TECH_NO_HIVE"), "{:?}", diag::snapshot());
 }

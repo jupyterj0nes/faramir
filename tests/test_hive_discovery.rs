@@ -209,10 +209,12 @@ fn full_triage_run_all_end_to_end() {
     assert_eq!(set.len(), 3);
     let all = run_all(&mut set, &d.path);
     let values: Vec<&str> = all.iter().map(|p| p.value.as_str()).collect();
-    for expected in [r"C:\ProgramData\u.exe", r"C:\Users\bob\b.exe", "Evil", "Startup Folder", r"C:\t.exe"] {
+    for expected in [r"C:\ProgramData\u.exe", r"C:\Users\bob\b.exe", r"C:\svc.exe", r"C:\t.exe"] {
         assert!(values.contains(&expected), "missing {expected}: {values:?}");
     }
-    assert!(all.iter().any(|p| p.technique == "Winlogon shell Property" && p.path.contains(r"C:\x.exe")), "value added by the transaction log must be visible");
+    assert!(values.iter().any(|v| v.ends_with("s.lnk")), "the Startup folder entry is the file: {values:?}");
+    assert!(all.iter().any(|p| p.value == r"C:\svc.exe" && p.path == r"Services\EvilSvc (Evil)"), "{all:?}");
+    assert!(all.iter().any(|p| p.technique == "Winlogon shell Property" && p.value.contains(r"C:\x.exe")), "value added by the transaction log must be visible");
     assert!(all.iter().any(|p| p.technique == "PowerShell Profile Script"));
     assert!(set.recovery(0).map(|r| r.logs_applied).unwrap_or(false) || set.recovery(1).map(|r| r.logs_applied).unwrap_or(false) || set.recovery(2).map(|r| r.logs_applied).unwrap_or(false));
     assert!(!diag::has("ERR_WIN_TECH_PANIC"));

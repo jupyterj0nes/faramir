@@ -616,13 +616,14 @@ mod tests {
         assert_eq!(v[0].score as u32, measured::points("H3015", Os::Windows));
         assert!(v[0].hunt_why().starts_with("rule H3015 (low): Image in the drive root [T1036]"), "{}", v[0].hunt_why());
         assert_eq!(r.rule_high + r.rule_medium, 0, "a low rule is neither");
-        // a rule measured common on the system is noise: no state, no points, its clause
-        let events = vec![ev("H", "windows:persistence:windows_service", "\"C:\\Program Files\\Vendor\\svc.exe\" @%SystemRoot%\\system32\\x.dll,-100", "2026-10-28 12:00:00.000")];
+        // a rule measured common on the system would be noise (no state, no points, its clause);
+        // none is on either reference today, so a high rule that fires counts with its measured points
+        let events = vec![ev("H", "windows:persistence:registry_run_key", "C:\\Users\\bob\\x.txt:evil.exe", "2026-10-28 12:00:00.000")];
         let (v, _) = evaluate(&events, &HuntSettings::default());
-        if v[0].reasons.iter().any(|x| x.starts_with("rule H1011 ")) {
-            assert_eq!(v[0].hunt, Hunt::NotEvaluated, "H1011 fires on 290 of 748 clean service rows: {:?}", v[0]);
-            assert_eq!(v[0].score, 0, "{:?}", v[0]);
-        }
+        assert!(v[0].reasons.iter().any(|x| x.starts_with("rule H1011 ")), "{:?}", v[0]);
+        assert_eq!(v[0].hunt, Hunt::Significant, "{:?}", v[0]);
+        assert!(measured::counts("H1011", Os::Windows));
+        assert!(v[0].score as u32 >= measured::points("H1011", Os::Windows), "{:?}", v[0]);
         // a medium rule on a stock entry: stock vouches for it, habitual, 0
         let events = vec![ev("H", "windows:persistence:registry_run_key", "C:\\Windows\\system32\\SecurityHealthSystray.exe", "2026-10-28 12:00:00.000")];
         let (v, _) = evaluate(&events, &HuntSettings::default());
