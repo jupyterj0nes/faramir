@@ -1153,9 +1153,9 @@ fn cli_carve_flag_recovers_hives_from_a_raw_image_without_a_file_system() {
     assert!(ghost[0].contains("windows:persistence:carved:registry_run_key"), "{}", ghost[0]);
     assert!(ghost[0].contains("carved SOFTWARE hive"), "{}", ghost[0]);
     assert!(ghost[0].contains("offset 0x100000"), "{}", ghost[0]);
-    assert!(ghost[0].starts_with("\"2024-01-17"), "hive write time is the event timestamp: {}", ghost[0]);
+    assert!(ghost[0].starts_with("2024-01-17"), "hive write time is the event timestamp: {}", ghost[0]);
     assert!(rows.iter().any(|r| r.contains("m.exe") && r.contains("carved NTUSER.DAT hive")), "{rows:?}");
-    assert!(rows.iter().all(|r| r.contains(",\"disk\",")), "computer name is the image stem: {rows:?}");
+    assert!(rows.iter().all(|r| r.contains(",disk,")), "computer name is the image stem: {rows:?}");
 }
 
 #[test]
@@ -1183,7 +1183,7 @@ fn cli_carves_a_plain_file_that_is_not_a_hive() {
     assert!(!stderr.contains("ERR_ING_CARVE_NO_TARGET"), "{stderr}");
     let rows = csv_rows(&out);
     assert_eq!(rows.len(), 1, "{rows:?}");
-    assert!(rows[0].contains("p.exe") && rows[0].contains("carved:registry_run_key") && rows[0].contains(",\"pagefile\","), "{}", rows[0]);
+    assert!(rows[0].contains("p.exe") && rows[0].contains("carved:registry_run_key") && rows[0].contains(",pagefile,"), "{}", rows[0]);
 }
 
 #[test]
@@ -1196,7 +1196,7 @@ fn cli_carve_flag_leaves_a_real_hive_file_to_the_normal_analysis() {
     assert!(!stdout.contains("Carving"), "{stdout}");
     let rows = csv_rows(&out);
     assert_eq!(rows.len(), 1, "{rows:?}");
-    assert!(rows[0].contains("\"windows:persistence:registry_run_key\""), "{}", rows[0]);
+    assert!(rows[0].contains(",windows:persistence:registry_run_key,"), "{}", rows[0]);
     assert!(!rows[0].contains("carved"), "{}", rows[0]);
     assert!(stderr.contains("ERR_ING_CARVE_NO_TARGET"), "the flag had nothing to work on: {stderr}");
 }

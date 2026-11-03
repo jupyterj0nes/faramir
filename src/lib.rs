@@ -8,3 +8,4 @@ pub mod ingest;
 pub mod windows;
 pub mod browser_ext;
 pub mod carve;
+pub mod hunt;

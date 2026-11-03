@@ -441,6 +441,7 @@ pub fn get_file_associations(set: &mut HiveSet) -> Vec<Persistence> {
 
 const OFFICE_APPS: &[&str] = &["Word", "Excel", "PowerPoint", "Outlook", "Access", "OneNote", "Project", "Visio", "Publisher", "MS Project"];
 
+#[allow(clippy::too_many_arguments)]
 fn office_addins_of(app: &str, addins: &KeyNode, hive: &mut HiveFile, info: &HiveInfo, root: Root, base: &str, technique: &str, access: &str) -> Vec<Persistence> {
     let mut out = Vec::new();
     let Ok(subs) = addins.subkeys(hive) else { return out };

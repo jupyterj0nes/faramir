@@ -285,6 +285,36 @@ pub enum FaramirError {
     CliInvalidAction(String),
     /// Target path does not exist (6003)
     CliPathNotFound(String),
+
+    // ─── 7000..7999: Hunting (flags, baseline, statistics) ──────────────────
+    /// `--baseline` could not be parsed as a date (7001)
+    HuntBaselineInvalid(String),
+    /// `--alpha` outside (0, 1) (7002)
+    HuntAlphaInvalid(String),
+    /// A `--known-good` CSV could not be opened (7003)
+    HuntKnownGoodOpenFailed(String),
+    /// A `--known-good` row could not be parsed and was skipped (7004)
+    HuntKnownGoodRowSkipped(String),
+    /// A `--known-good` CSV was loaded (7005)
+    HuntKnownGoodLoaded(String),
+    /// Nothing to compare against: no reference rows for a technique, the statistical test was skipped (7006)
+    HuntNoReference(String),
+    /// A row's timestamp could not be parsed; it is treated as undated (7007)
+    HuntTimestampUnparsed(String),
+    /// Summary of the hunt pass (7008)
+    HuntSummary(String),
+    /// Only one host in the run: the fleet-prevalence coordinate is off (7009)
+    HuntSingleHost(String),
+    /// Hunting disabled by `--no-hunt`; the flag columns are empty (7010)
+    HuntDisabled(String),
+    /// Rows written after the baseline date without any other mark (7011)
+    HuntAfterBaseline(String),
+    /// `--carry-marks` CSV cannot be opened (7012)
+    HuntMarksOpenFailed(String),
+    /// Marks (`verdict`, `notes`) carried from an earlier CSV (7013)
+    HuntMarksLoaded(String),
+    /// `--carry-marks` file is not a faramir timeline with a `verdict`/`notes` tail (7014)
+    HuntMarksNotTimeline(String),
 }
 
 impl FaramirError {
@@ -420,6 +450,21 @@ impl FaramirError {
             Self::CliNoTarget(_) => "ERR_CLI_NO_TARGET",
             Self::CliInvalidAction(_) => "ERR_CLI_INVALID_ACTION",
             Self::CliPathNotFound(_) => "ERR_CLI_PATH_NOT_FOUND",
+
+            Self::HuntBaselineInvalid(_) => "ERR_HUNT_BASELINE_INVALID",
+            Self::HuntAlphaInvalid(_) => "ERR_HUNT_ALPHA_INVALID",
+            Self::HuntKnownGoodOpenFailed(_) => "ERR_HUNT_KNOWN_GOOD_OPEN",
+            Self::HuntKnownGoodRowSkipped(_) => "ERR_HUNT_KNOWN_GOOD_ROW_SKIPPED",
+            Self::HuntKnownGoodLoaded(_) => "ERR_HUNT_KNOWN_GOOD_LOADED",
+            Self::HuntNoReference(_) => "ERR_HUNT_NO_REFERENCE",
+            Self::HuntTimestampUnparsed(_) => "ERR_HUNT_TIMESTAMP_UNPARSED",
+            Self::HuntSummary(_) => "ERR_HUNT_SUMMARY",
+            Self::HuntSingleHost(_) => "ERR_HUNT_SINGLE_HOST",
+            Self::HuntDisabled(_) => "ERR_HUNT_DISABLED",
+            Self::HuntAfterBaseline(_) => "ERR_HUNT_AFTER_BASELINE",
+            Self::HuntMarksOpenFailed(_) => "ERR_HUNT_MARKS_OPEN",
+            Self::HuntMarksLoaded(_) => "ERR_HUNT_MARKS_LOADED",
+            Self::HuntMarksNotTimeline(_) => "ERR_HUNT_MARKS_NOT_TIMELINE",
         }
     }
 
@@ -555,6 +600,21 @@ impl FaramirError {
             Self::CliNoTarget(_) => 6001,
             Self::CliInvalidAction(_) => 6002,
             Self::CliPathNotFound(_) => 6003,
+
+            Self::HuntBaselineInvalid(_) => 7001,
+            Self::HuntAlphaInvalid(_) => 7002,
+            Self::HuntKnownGoodOpenFailed(_) => 7003,
+            Self::HuntKnownGoodRowSkipped(_) => 7004,
+            Self::HuntKnownGoodLoaded(_) => 7005,
+            Self::HuntNoReference(_) => 7006,
+            Self::HuntTimestampUnparsed(_) => 7007,
+            Self::HuntSummary(_) => 7008,
+            Self::HuntSingleHost(_) => 7009,
+            Self::HuntDisabled(_) => 7010,
+            Self::HuntAfterBaseline(_) => 7011,
+            Self::HuntMarksOpenFailed(_) => 7012,
+            Self::HuntMarksLoaded(_) => 7013,
+            Self::HuntMarksNotTimeline(_) => 7014,
         }
     }
 
@@ -591,6 +651,9 @@ impl FaramirError {
             | Self::ExtJournalParseError(_)
             | Self::ExtDeletedContentReused(_)
             | Self::BrowserProfileParseError(_)
+            | Self::HuntKnownGoodRowSkipped(_)
+            | Self::HuntNoReference(_)
+            | Self::HuntTimestampUnparsed(_)
             | Self::ValueEmpty(_) => Severity::Warning,
 
             Self::HiveCompanionSkipped(_)
@@ -607,6 +670,12 @@ impl FaramirError {
             | Self::TxLogHiveMismatch(_)
             | Self::TechniqueNoApplicableHive(_)
             | Self::TxLogRemoteMatch(_)
+            | Self::HuntKnownGoodLoaded(_)
+            | Self::HuntSummary(_)
+            | Self::HuntSingleHost(_)
+            | Self::HuntDisabled(_)
+            | Self::HuntAfterBaseline(_)
+            | Self::HuntMarksLoaded(_)
             | Self::HiveRecovered(_) => Severity::Info,
 
             _ => Severity::Error,
@@ -622,6 +691,7 @@ impl FaramirError {
             4 => "LNX",
             5 => "OUT",
             6 => "CLI",
+            7 => "HUNT",
             _ => "UNK",
         }
     }
@@ -752,7 +822,21 @@ impl FaramirError {
             | Self::OutDirCreateFailed(s)
             | Self::CliNoTarget(s)
             | Self::CliInvalidAction(s)
-            | Self::CliPathNotFound(s) => s,
+            | Self::CliPathNotFound(s)
+            | Self::HuntBaselineInvalid(s)
+            | Self::HuntAlphaInvalid(s)
+            | Self::HuntKnownGoodOpenFailed(s)
+            | Self::HuntKnownGoodRowSkipped(s)
+            | Self::HuntKnownGoodLoaded(s)
+            | Self::HuntNoReference(s)
+            | Self::HuntTimestampUnparsed(s)
+            | Self::HuntSummary(s)
+            | Self::HuntSingleHost(s)
+            | Self::HuntDisabled(s)
+            | Self::HuntAfterBaseline(s)
+            | Self::HuntMarksOpenFailed(s)
+            | Self::HuntMarksLoaded(s)
+            | Self::HuntMarksNotTimeline(s) => s,
         }
     }
 
@@ -885,6 +969,20 @@ impl FaramirError {
             Self::CliNoTarget(e()),
             Self::CliInvalidAction(e()),
             Self::CliPathNotFound(e()),
+            Self::HuntBaselineInvalid(e()),
+            Self::HuntAlphaInvalid(e()),
+            Self::HuntKnownGoodOpenFailed(e()),
+            Self::HuntKnownGoodRowSkipped(e()),
+            Self::HuntKnownGoodLoaded(e()),
+            Self::HuntNoReference(e()),
+            Self::HuntTimestampUnparsed(e()),
+            Self::HuntSummary(e()),
+            Self::HuntSingleHost(e()),
+            Self::HuntDisabled(e()),
+            Self::HuntAfterBaseline(e()),
+            Self::HuntMarksOpenFailed(e()),
+            Self::HuntMarksLoaded(e()),
+            Self::HuntMarksNotTimeline(e()),
         ]
     }
 }
@@ -1022,6 +1120,21 @@ impl fmt::Display for FaramirError {
             Self::CliNoTarget(msg) => write!(f, "No evidence targets provided: {}", msg),
             Self::CliInvalidAction(msg) => write!(f, "Invalid CLI action: {}", msg),
             Self::CliPathNotFound(p) => write!(f, "Target path does not exist: {}", p),
+
+            Self::HuntBaselineInvalid(s) => write!(f, "Baseline date not understood (use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS): {}", s),
+            Self::HuntAlphaInvalid(s) => write!(f, "Alpha must be between 0 and 1: {}", s),
+            Self::HuntKnownGoodOpenFailed(s) => write!(f, "Cannot open known-good CSV: {}", s),
+            Self::HuntKnownGoodRowSkipped(s) => write!(f, "Known-good row skipped: {}", s),
+            Self::HuntKnownGoodLoaded(s) => write!(f, "Known-good entries loaded: {}", s),
+            Self::HuntNoReference(s) => write!(f, "No reference rows, statistical test skipped: {}", s),
+            Self::HuntTimestampUnparsed(s) => write!(f, "Timestamp not parsed, row treated as undated: {}", s),
+            Self::HuntSummary(s) => write!(f, "Hunt: {}", s),
+            Self::HuntSingleHost(s) => write!(f, "Single host in the run: {}", s),
+            Self::HuntDisabled(s) => write!(f, "Hunting disabled: {}", s),
+            Self::HuntAfterBaseline(s) => write!(f, "Rows after the baseline date: {}", s),
+            Self::HuntMarksOpenFailed(s) => write!(f, "Cannot open the CSV to carry marks from: {}", s),
+            Self::HuntMarksLoaded(s) => write!(f, "Marks carried: {}", s),
+            Self::HuntMarksNotTimeline(s) => write!(f, "Not a faramir timeline with verdict/notes: {}", s),
         }
     }
 }

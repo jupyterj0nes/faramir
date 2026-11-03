@@ -35,8 +35,9 @@ It is the Rust successor of [Boromir](https://github.com/Alexgpsec/Persistence_B
 - **Linux persistence**: cron, systemd, shell profiles, SSH, sudoers, PAM, udev, kernel modules, package hooks, `ld.so.preload` and live-process anomalies.
 - **Deleted persistence**: keys and values recovered from freed hive cells, plus anything that existed in a Volume Shadow Copy but is gone from the live volume. On ext4, the jbd2 journal gives back deleted crontabs, units and keys with their name, dates and content, and the previous content of files that were rewritten.
 - **Carving, when you ask for it.** `--carve` scans the raw bytes of an image, a pagefile or a memory dump for whole registry hives that no file system points to any more, and runs every technique on them. Off by default; every finding it adds is tagged `carved`. The scanner and the hive-bin chain reader are the [blockcarve](https://github.com/jupyterj0nes/blockcarve) crate shared with masstin, allymacb and caarea.
-- **One CSV timeline** with the same columns as [masstin](https://github.com/jupyterj0nes/masstin), so persistence and lateral movement from the same case concatenate.
-- **Nothing silent**: 130+ numbered diagnostic codes with a severity; a corrupt log, a renamed hive or a parser panic is reported and the run goes on.
+- **Every row flagged.** Two engines look at each finding: a catalogue of what known-bad persistence looks like (LOLBins fetching URLs, encoded PowerShell, `ld.so.preload`, reverse shells, system names outside their folders, scratch folders…) against what a stock Windows or Linux ships with, and a statistical test, the one masstin's graph-hunt uses, that asks how unusual the entry is compared with the rest of the run: on how many hosts it appears, how common its folder and its name are among its peers, whether it was written in a burst with other techniques. `--baseline <date>` makes everything before the date the reference and puts what came after to the test. Result: `significant`, `candidate`, `habitual`, `baseline` or `not_evaluated`, the same words masstin, caarea and allymacb write, with a 0 to 100 score and the reasons, each one saying whether a rule or the test spoke.
+- **One CSV timeline, masstin's 19 columns.** The header is byte for byte the one [masstin](https://github.com/jupyterj0nes/masstin) writes: 14 event columns (faramir fills the eight that mean the same thing and leaves the logon-only ones empty) and the analysis tail (`hunt`, `hunt_score`, `hunt_why` from the hunt, `verdict`, `notes` from the analyst). Persistence and lateral movement from the same case concatenate, and a case tool reads one convention.
+- **Nothing silent**: 140+ numbered diagnostic codes with a severity; a corrupt log, a renamed hive or a parser panic is reported and the run goes on.
 
 ## Demo
 
@@ -82,6 +83,11 @@ faramir [OPTIONS] [ACTION]
 | `--verbose` | Also print informational diagnostics (companion files skipped, logs matched outside the hive folder, hives rebuilt). |
 | `--silent` | No console output. |
 | `--carve` | Also scan the raw bytes of every disk image, and of any `-f` file that is not a hive, for registry hives. Reads the whole image, so it is opt-in. Findings are tagged `carved`. |
+| `--baseline <DATE>` | Rows written before the date are what the machine looked like when it was trusted (`baseline`); rows after it are tested against them and are `candidate` when nothing else is said about them. `YYYY-MM-DD`, optionally with `HH:MM[:SS]`. `--investigation-from`, masstin's name for it, is an alias. |
+| `--known-good <CSV>` | A faramir CSV from a clean host (this layout or the ten-column one of 0.3): its entries count as known good on every host (user names, SIDs and drive letters are neutralised). Repeatable. |
+| `--alpha <ALPHA>` | False-discovery rate of the statistical test, the share of `significant` rows allowed to be false alarms. Default `0.05`. |
+| `--carry-marks <CSV>` | An earlier faramir CSV of the same evidence: its `verdict` and `notes` are copied onto every row with the same 14 event columns (masstin's row hash), so marking is not lost when the evidence is parsed again. Repeatable. |
+| `--no-hunt` | Leave `hunt`, `hunt_score` and `hunt_why` empty. |
 | `--source-evidence <DIR>`, `--csv-output <DIR>` | Legacy Boromir flags, still accepted. |
 | `[ACTION]` | `all` (default), any `get-*` technique from the tables below, `get-deleted-persistence`, `get-linux-persistence`. |
 
@@ -250,26 +256,88 @@ Hives are recognised by name **and** by header, so `bob_NTUSER.DAT`, `HOST-SOFTW
 | Live state | processes running a deleted binary, execution from `/tmp` |
 | Browsers | Chromium and Firefox extensions per profile (origin, install time, risky permissions), policy force-installs |
 
-## Output
+## Hunting
 
-One CSV, ten columns, the same schema masstin writes:
+Every row gets a state in `hunt`: the same column, in the same place, with the same six words masstin, caarea and allymacb write (masstin's `docs/csv-format.md`, "The same tail in caarea, faramir and allymacb"), so a case tool maps the tail once. masstin only tests; faramir also runs static rules, and the state comes from the strongest evidence: a high rule gives `significant`, a medium rule `candidate`, a low rule leaves the statistical state as it is, and when a test and a rule both speak the stronger state wins. No other word goes into the column: `suspicious` is the analyst's, in `verdict`. Highest first:
 
-| Column | Example |
+| `hunt` | Meaning |
 |---|---|
-| `timestamp` | `2024-01-17 21:20:00.000` (key last-write time) |
-| `computer` | `WS01` |
-| `artifact` | `windows:persistence:registry_run_key`, `windows:persistence:deleted:windows_service`, `windows:persistence:removed_since_vss:registry_run_key`, `windows:persistence:carved:registry_run_key`, `windows:persistence:carved:deleted:…`, `linux:ssh:authorized_key`, `linux:deleted:cron:system_job`, `linux:previous_version:sudoers:nopasswd` |
-| `event_id` / `pid` | `0` for persistence rows |
-| `subject_username` / `target_username` | `System`, `User`, `root` |
-| `processname` | `updater.exe` |
-| `commandline` | `C:\ProgramData\updater.exe --silent` |
-| `parentprocessname` | Where it was found: the hive path, the key, the unit file, the snapshot, the carved hive with its write time and image offset |
+| `significant` | A high rule fired (`mshta http://…`, `powershell -enc`, a system binary name outside its folder, a DLL slot pointing at AppData, `ld.so.preload`, a reverse shell, a cron job from `/tmp`, an SSH key forcing a command from a hidden folder…), or nothing known about it but tested and statistically rare among the rows of its technique in this run: q ≤ `--alpha`. |
+| `candidate` | A medium rule (a remote-management tool, PowerShell with a hidden window, an every-minute cron, a slot that is empty on a stock system) on an entry that is not stock or known good; or tested with q above alpha (written after `--baseline`, or present on one host of the fleet); or no longer on the live system (deleted, only in a shadow copy, carved, previous version). Nothing passes the bar, but worth a look. |
+| `habitual` | Stock entry, in a `--known-good` CSV, or present on several hosts of the fleet: p = 1, reference, not a test. |
+| `baseline` | Written before `--baseline`: reference, not judged. |
+| `not_evaluated` | No test could be made (one host and no baseline, or no other row of the technique to compare with) and no rule fired. |
+| empty | `--no-hunt`. |
+
+`hunt_score` is masstin's number, with the same meaning: how rare the row is, as −10·log10 of a probability, rounded and capped at 100, so ten points are one order of magnitude. The statistical test contributes −10·log10(q); every rule that fired adds its own points in the same unit, since independent evidence adds in log space; a reference row (`habitual`, `baseline`) is 0.
+
+| Points | Read as | Where it comes from |
+|---|---|---|
+| 0 | no rarer than chance | habitual, baseline, a tested row with q = 1 |
+| 10 | one in ten | a low rule (measured one in 128 on a stock host) |
+| 13 | one in twenty | q = 0.05, the default alpha: `significant` starts here |
+| 20 | one in a hundred | a medium rule (measured one in 190), or q = 0.01 |
+| 30 | one in a thousand | q = 0.001, or a medium and a low |
+| 60 | one in a million | q = 10⁻⁶ |
+| 90 | one in a thousand million | a high rule: the level's admission criterion is that the pattern has no benign reading (on the stock rows measured, none fired) |
+| 100 | the cap | a high rule with anything else, or q ≤ 10⁻¹⁰ |
+
+`hunt_score >= 30` keeps what is rarer than one in a thousand, in masstin's timeline and in this one alike. A row made `significant` by a high rule is 90 or more; one made `candidate` by a medium rule, 20 or more; a `significant` row from the test alone starts at 13 (the default alpha) and grows with its rarity; a low rule adds 10 and leaves the state alone.
+
+`hunt_why` says which spoke. A rule's clause starts with its id and level, then the title and the ATT&CK technique: `rule H1001 (high): LOLBin fetching remote content [T1218]`. The test's clause is in words, with the exact p and q: `rare among 1200 windows_service row(s) (p=0.001, q=0.025): on 1 of 40 hosts, folder: ProgramData (1 of 1200), name: hex-like name (1 of 1200)`. So are the rest: `stock Windows entry`, `in known-good CSV`, `before the baseline`, `on 40 of 40 hosts`, `written after the baseline`, `deleted`. Rules first, strongest first, then the words, `; ` between. A reader that wants only the rules filters `hunt_why` on `rule `; one that wants only the statistics, on its absence. `verdict` (`suspicious`, `confirmed`, `benign`) and `notes` are the analyst's: faramir leaves them empty and `--carry-marks` brings them back from an earlier CSV of the same evidence.
+
+**Knowledge.** The rule catalogue (`src/hunt/rules.rs`, ids `H1xxx` Windows, `H2xxx` Linux, `H3xxx` both) is what Autoruns, Trawler and PersistenceSniper look for, offline and for both systems: LOLBins with URLs, encoded or hidden PowerShell, `rundll32` script hosts, system binary names outside `System32`, Winlogon Shell/Userinit changes, IFEO debuggers, DLL slots outside the system folders, scripts and executables in Temp, Public, ProgramData, AppData, the Recycle Bin or a hidden folder, double extensions, alternate data streams, network shares, offensive and tunnelling tools, remote-management and cloud-sync tools, download-and-run, reverse shells, base64 and other obfuscation, defence tampering, commands that install further persistence or change accounts, SUID and capability changes; on Linux also `ld.so.preload`, PAM bypasses, SSH forced commands, every-minute crons, daemon names outside the package tree, modprobe install hooks, APT hooks, deleted binaries still running, shell profiles that hook `sudo`, set `LD_PRELOAD` or hide history, forced browser extensions. Against it, the stock lists (`src/hunt/known_good.rs`): the Run entries, services, LSA packages, SSPs, print monitors, netsh helpers and network providers Windows ships with, and the crontab lines, `cron.daily` scripts, APT hooks, udev helpers, `profile.d` scripts, autostart entries, kernel modules and cloud-image sudoers of Debian, Ubuntu and RHEL. A stock match never cancels a high rule; it stops a medium or low rule from making the row `candidate` on weak evidence.
+
+**Statistics.** The same design as masstin's graph-hunt, applied to persistence rows (see `docs/graph-hunt-statistics.md` in masstin). For each row, every coordinate is a tail share measured in the run itself: the share of rows of the same technique whose folder family is at least as rare, whose name shape (plain, with digits, mostly digits, hex-like, tiny) is at least as rare, whose minute saw at least as many different techniques written on the same host; with several hosts and a baseline, the share of hosts carrying the same entry. The statistic is the sum of −ln(share); its p-value is conformal, (1 + reference rows with a statistic at least as large) / (1 + reference rows); Benjamini-Hochberg across every tested row of the run controls the false-discovery rate at `--alpha`. A conformal p-value can never go below 1/(N+1), so the rows put to the test have to be few compared with the reference, exactly as masstin tests the window days against the baseline days. Three modes, chosen per operating system: with `--baseline`, reference = rows written before the date, tested = rows after it or undated; without a baseline and with several hosts (`-d triages/`), reference = every row of the technique, tested = entries present on exactly one host (Kansa's least-frequency-of-occurrence, with the selection kept out of the statistic); one host and no baseline, the test is skipped and the run says so (`ERR_HUNT_SINGLE_HOST`), rules and stock lists still apply. Stock and known-good rows are reference, never tested.
 
 ```
-"2026-10-28 12:00:00.000","WS01","windows:persistence:registry_run_key",0,0,"User","User","bob.exe","C:\Users\bob\bob.exe","…\entry_50_0\NTUSER.DAT"
-"2026-10-28 12:00:00.000","WS01","windows:persistence:windows_service",0,0,"System","System","EvilSvc","EvilSvc","C:\Windows\Temp\evilsvc.exe"
-"","WS01","windows:persistence:deleted:deleted_registry_persistence",0,0,"Unknown","Unknown","d.exe","C:\Users\Public\d.exe -s","deleted value Dropper (key unknown)"
-"2026-09-30 08:15:42.000","WS01","windows:persistence:carved:registry_run_key",0,0,"System","System","upd.exe","C:\ProgramData\upd.exe","carved SOFTWARE hive written 2026-09-30 08:15:42.000 at offset 0x1c3f80000 (71303168 bytes, 17408 bin(s), complete): …\carved\carved_0001c3f80000_SOFTWARE.regf"
+faramir -d /cases/incident-4711/triages -o incident-4711.csv --baseline 2026-10-01
+faramir -f /cases/WS01.E01 -o ws01.csv --baseline "2026-10-01 08:00" --known-good /baselines/ws-gold.csv
+faramir -d /cases/triages -o persistence.csv --alpha 0.01
+faramir -f /cases/WS01-reimaged.E01 -o ws01-v2.csv --baseline 2026-10-01 --carry-marks ws01.csv
+```
+
+## Output
+
+One CSV with masstin's 19 columns, in masstin's order and with masstin's names, so `merge`, the loaders and a case tool read it as any other timeline. The 14 event columns:
+
+| Column | faramir writes |
+|---|---|
+| `time_created` | `2024-01-17 21:20:00.000` (key last-write time, unit mtime; empty when unknown) |
+| `dst_computer` | `WS01` |
+| `event_type` | The technique: `windows:persistence:registry_run_key`, `windows:persistence:deleted:windows_service`, `windows:persistence:removed_since_vss:registry_run_key`, `windows:persistence:carved:registry_run_key`, `linux:ssh:authorized_key`, `linux:deleted:cron:system_job`, `linux:previous_version:sudoers:nopasswd` |
+| `event_id` | `0` |
+| `logon_type` | empty |
+| `target_user_name` | `System`, `User`, `root`, the account of the crontab or the SSH key |
+| `target_domain_name` | empty |
+| `src_computer` | empty |
+| `src_ip` | empty |
+| `subject_user_name` | the same account |
+| `subject_domain_name` | empty |
+| `logon_id` | empty |
+| `detail` | The entry: `C:\ProgramData\updater.exe --silent`, `Systemd Unit: x.service (Desc: …, Exec: /usr/sbin/x)`, `Sudoers [sudoers line 55]: %Leadership ALL=(ALL) NOPASSWD:ALL` |
+| `log_filename` | Where it was found: the hive path, the key, the unit file, the daemon (`crond`, `systemd`, `udevd`), the snapshot, the carved hive with its write time and image offset |
+
+The logon-only columns stay empty on purpose: they exist so the columns line up with masstin's. Then the analysis tail:
+
+| Column | Written by | Values |
+|---|---|---|
+| `hunt` | faramir | `significant`, `candidate`, `habitual`, `baseline`, `not_evaluated` or empty: the six words of the shared tail (see Hunting) |
+| `hunt_score` | faramir | `0`–`100`, masstin's rarity scale (see Hunting) |
+| `hunt_why` | faramir | `rule H1001 (high): LOLBin fetching remote content [T1218]; rule H3001 (high): Persistence from a scratch folder [T1547]; written after the baseline` |
+| `verdict` | the analyst | `suspicious`, `confirmed`, `benign` or empty |
+| `notes` | the analyst | free text, `#tags` welcome |
+
+Quoting is masstin's: an empty event field is `""`, a value with a comma, a quote or a line break is quoted, the rest is bare, and the tail is bare when empty (`,,,,,`).
+
+```
+time_created,dst_computer,event_type,event_id,logon_type,target_user_name,target_domain_name,src_computer,src_ip,subject_user_name,subject_domain_name,logon_id,detail,log_filename,hunt,hunt_score,hunt_why,verdict,notes
+2026-10-28 12:00:00.000,WS01,windows:persistence:registry_run_key,0,"",User,"","","",User,"","",C:\Users\bob\bob.exe,…\entry_50_0\NTUSER.DAT,candidate,24,rule H3003 (medium): Executes from a user profile folder or a hidden directory [T1564.001]; written after the baseline,,
+2026-10-28 12:00:00.000,WS01,windows:persistence:windows_service,0,"",System,"","","",System,"","",C:\Windows\Temp\evilsvc.exe,HKLM\SYSTEM\CurrentControlSet\Services\EvilSvc,significant,100,rule H1009 (high): Script run from a user-writable folder [T1059]; rule H3001 (high): Persistence from a scratch folder [T1547]; rule H1015 (medium): Runs as SYSTEM from a user-writable folder [T1053.005]; written after the baseline,confirmed,"#ir-4711 dropper, see ticket"
+"",WS01,windows:persistence:deleted:deleted_registry_persistence,0,"",Unknown,"","","",Unknown,"","",C:\Users\Public\d.exe -s,deleted value Dropper (key unknown),significant,100,rule H3001 (high): Persistence from a scratch folder [T1547]; rule H3014 (low): No longer present on the live system [T1070]; deleted,,
+2026-09-30 08:15:42.000,WS01,windows:persistence:carved:registry_run_key,0,"",System,"","","",System,"","",C:\ProgramData\upd.exe,"carved SOFTWARE hive written 2026-09-30 08:15:42.000 at offset 0x1c3f80000 (71303168 bytes, 17408 bin(s), complete): …\carved\carved_0001c3f80000_SOFTWARE.regf",candidate,20,rule H3002 (low): Executes from AppData, ProgramData, a home or a hidden folder [T1547]; rule H3014 (low): No longer present on the live system [T1070]; carved,,
+2026-10-28 12:00:00.000,WS01,windows:persistence:registry_run_key,0,"",User,"","","",User,"","",C:\Windows\system32\SecurityHealthSystray.exe,…\NTUSER.DAT,habitual,0,stock Windows entry,,
+2026-03-02 09:10:00.000,WS01,windows:persistence:windows_service,0,"",System,"","","",System,"","","""C:\Program Files\Common Files\Adobe\ARM\1.0\armsvc.exe""",…\SYSTEM,baseline,0,before the baseline,,
 ```
 
 ## Diagnostics
@@ -288,7 +356,7 @@ Anything that degrades a run is printed to stderr with a code, a number and a se
 | `WARN` | Processed in degraded mode (dirty hive without logs, control set missing, parser panic caught) |
 | `INFO` | Nothing lost (companion file skipped, log matched outside the hive folder, hive rebuilt). Shown with `--verbose` |
 
-The catalogue is in `src/errors.rs`: `1xxx` system, `2xxx` ingestion, `3xxx` Windows registry, `4xxx` Linux, `5xxx` output, `6xxx` CLI.
+The catalogue is in `src/errors.rs`: `1xxx` system, `2xxx` ingestion, `3xxx` Windows registry, `4xxx` Linux, `5xxx` output, `6xxx` CLI, `7xxx` hunting.
 
 ## How it works
 
@@ -312,7 +380,7 @@ The catalogue is in `src/errors.rs`: `1xxx` system, `2xxx` ingestion, `3xxx` Win
 cargo test
 ```
 
-1056 tests. The suite builds its own hives and transaction logs (a small regf/HvLE writer with real Marvin32 hashes), replays a real Windows 10 dirty hive and compares the result with `rla.exe` byte for byte, replays a real Windows 7 dirty hive and compares it with the copy Windows 7 recovered, cross-checks deleted-cell recovery with `RECmd --recover`, runs a synthetic Cortex XDR package through the binary end to end, reads synthetic VHD, VHDX and VMDK images through the NTFS extractor, and carves hives out of synthetic disks with bad sectors, stalled reads, overwritten bins and copies cut by the end of the image, and checks the 17 techniques added after the IRFlow and Autoruns comparison (browser profiles and policy files included) against synthetic hives and trees. `scripts/carve_lab.ps1` builds a real NTFS volume on a Windows host (saved hives, a shadow copy, deletions with TRIM off) and `cargo test --test test_carve_lab -- --ignored` with `FARAMIR_CARVELAB` pointing at its output checks every carved hive against the clusters NTFS had given the file. `scripts/linux_collect.sh` makes a read-only UAC-style collection of a Linux host; the one taken from an Ubuntu 22.04 domain member is what the usr-merge deduplication, host-relative paths and timestamp format were corrected against. `scripts/linux_disk_lab.sh` builds, on a Linux host, a GPT+ext4 image and an MBR+LVM+ext4 image with one canary per technique (both ship as fixtures under `tests/fixtures/linux_disk/`) plus a 256 MB ext4 image of that host's real configuration for `cargo test --test test_linux_disk -- --ignored` with `FARAMIR_LINUXDISK`.
+1150+ tests. The suite builds its own hives and transaction logs (a small regf/HvLE writer with real Marvin32 hashes), replays a real Windows 10 dirty hive and compares the result with `rla.exe` byte for byte, replays a real Windows 7 dirty hive and compares it with the copy Windows 7 recovered, cross-checks deleted-cell recovery with `RECmd --recover`, runs a synthetic Cortex XDR package through the binary end to end, reads synthetic VHD, VHDX and VMDK images through the NTFS extractor, and carves hives out of synthetic disks with bad sectors, stalled reads, overwritten bins and copies cut by the end of the image, and checks the 17 techniques added after the IRFlow and Autoruns comparison (browser profiles and policy files included) against synthetic hives and trees. The hunt is tested rule by rule (every rule has a row that fires it and stock rows that do not), on a synthetic 40-host fleet where the one odd service comes out `significant` and forty ordinary vendor agents come out `habitual`, on a single host with and without a baseline, on the stock Ubuntu rows a real collection produced, and through the binary with a UAC tree, `--baseline`, `--known-good`, `--carry-marks` and `--no-hunt`. `scripts/carve_lab.ps1` builds a real NTFS volume on a Windows host (saved hives, a shadow copy, deletions with TRIM off) and `cargo test --test test_carve_lab -- --ignored` with `FARAMIR_CARVELAB` pointing at its output checks every carved hive against the clusters NTFS had given the file. `scripts/linux_collect.sh` makes a read-only UAC-style collection of a Linux host; the one taken from an Ubuntu 22.04 domain member is what the usr-merge deduplication, host-relative paths and timestamp format were corrected against. `scripts/linux_disk_lab.sh` builds, on a Linux host, a GPT+ext4 image and an MBR+LVM+ext4 image with one canary per technique (both ship as fixtures under `tests/fixtures/linux_disk/`) plus a 256 MB ext4 image of that host's real configuration for `cargo test --test test_linux_disk -- --ignored` with `FARAMIR_LINUXDISK`.
 
 ## Credits
 

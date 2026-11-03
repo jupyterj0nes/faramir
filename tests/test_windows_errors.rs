@@ -178,6 +178,7 @@ fn catalog_numbers_match_category_ranges() {
             "LNX" => (4000..5000).contains(&n),
             "OUT" => (5000..6000).contains(&n),
             "CLI" => (6000..7000).contains(&n),
+            "HUNT" => (7000..8000).contains(&n),
             other => panic!("unknown category {other}"),
         };
         assert!(range_ok, "{} has number {n} outside its range", e.code());

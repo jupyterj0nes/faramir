@@ -170,6 +170,31 @@ struct Args {
     #[arg(long = "carve")]
     carve: bool,
 
+    /// Baseline date: rows written before it are what the machine looked like
+    /// when it was trusted; rows after it are tested against them and get
+    /// "review" when nothing else is said about them. YYYY-MM-DD[ HH:MM[:SS]].
+    #[arg(long = "baseline", visible_alias = "investigation-from", value_name = "DATE")]
+    baseline: Option<String>,
+
+    /// False-discovery rate of the statistical test (the share of "significant"
+    /// rows allowed to be false alarms).
+    #[arg(long = "alpha", value_name = "ALPHA", default_value_t = faramir::hunt::DEFAULT_ALPHA)]
+    alpha: f64,
+
+    /// faramir CSV of a clean host: its entries are known good on every host
+    /// (user names, SIDs and drive letters are neutralised). Repeatable.
+    #[arg(long = "known-good", value_name = "CSV")]
+    known_good: Vec<PathBuf>,
+
+    /// Do not hunt: leave hunt, hunt_score and hunt_why empty.
+    #[arg(long = "no-hunt")]
+    no_hunt: bool,
+
+    /// Earlier faramir CSV of the same evidence: its verdict and notes are
+    /// copied onto every row with the same ten event columns. Repeatable.
+    #[arg(long = "carry-marks", value_name = "CSV")]
+    carry_marks: Vec<PathBuf>,
+
     /// Action to perform
     #[arg(default_value = "all")]
     action: Action,
@@ -372,6 +397,25 @@ fn main() -> Result<()> {
     }
     let raw_files = args.file.clone();
 
+    let baseline = match args.baseline.as_deref() {
+        Some(s) => match faramir::hunt::parse_baseline(s) {
+            Ok(b) => Some(b),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        },
+        None => None,
+    };
+    let alpha = match faramir::hunt::validate_alpha(args.alpha) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
+    let hunt_settings = faramir::hunt::HuntSettings { enabled: !args.no_hunt, baseline, alpha, known_good: args.known_good.clone() };
+
     if raw_dirs.is_empty() && raw_files.is_empty() {
         eprintln!("{}", faramir::errors::FaramirError::CliNoTarget("at least one directory or file must be provided".into()));
         eprintln!("Usage examples:");
@@ -503,6 +547,23 @@ fn main() -> Result<()> {
 
     all_events.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
 
+    let (verdicts, hunt_report) = faramir::hunt::evaluate(&all_events, &hunt_settings);
+    if !args.silent && hunt_settings.enabled {
+        println!(
+            "🎯 Hunt: {} significant ({} by a high rule), {} candidate ({} by a medium rule), {} habitual, {} not evaluated ({} host(s), {} row(s) tested, alpha {}{})",
+            hunt_report.significant,
+            hunt_report.rule_high,
+            hunt_report.candidate,
+            hunt_report.rule_medium,
+            hunt_report.habitual,
+            hunt_report.not_evaluated,
+            hunt_report.hosts,
+            hunt_report.tested,
+            hunt_settings.alpha,
+            hunt_settings.baseline.map(|b| format!(", baseline {}", b.format("%Y-%m-%d %H:%M:%S"))).unwrap_or_default()
+        );
+    }
+
     let summary = diag::summary();
     if !args.silent {
         println!("📊 Total persistence events collected: {}", all_events.len());
@@ -512,6 +573,15 @@ fn main() -> Result<()> {
         );
     }
 
-    csv_out::export_timeline(&all_events, &out_file, args.silent)?;
+    // hunting off: the three columns stay empty rather than reading as "nothing found, score 0"
+    let verdicts: &[faramir::hunt::Verdict] = if hunt_settings.enabled { &verdicts } else { &[] };
+    let (marks, marks_errors) = faramir::hunt::Marks::load(&args.carry_marks);
+    for e in marks_errors {
+        diag::record(e);
+    }
+    if !args.silent && !args.carry_marks.is_empty() {
+        println!("📝 Marks carried from {} file(s): {} row(s) with a verdict or notes", marks.files, marks.len());
+    }
+    csv_out::export_timeline(&all_events, verdicts, &marks, &out_file, args.silent)?;
     Ok(())
 }

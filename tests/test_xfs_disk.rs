@@ -123,7 +123,7 @@ fn xfs_through_the_cli() {
     assert!(!stderr.contains("ERR_ING_LINUX_FS_UNSUPPORTED"), "{stderr}");
     let csv = std::fs::read_to_string(&out).unwrap();
     assert!(csv.contains("linux:sudoers:nopasswd") && csv.contains("/opt/lab/lvmxfs/sudo_v2.sh"), "{csv}");
-    assert!(csv.lines().skip(1).all(|r| r.contains("\"lab-lvmxfs\"")));
+    assert!(csv.lines().skip(1).all(|r| r.contains(",lab-lvmxfs,")));
 }
 
 #[test]

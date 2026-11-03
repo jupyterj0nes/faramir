@@ -144,7 +144,7 @@ fn image_through_the_cli() {
     assert!(!stderr.contains("[PANIC]") && !stderr.contains("[ERROR]"), "{stderr}");
     let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(1).map(String::from).collect();
     assert!(rows.len() >= 12, "{rows:?}");
-    assert!(rows.iter().all(|r| r.contains("\"lab-lvm\"")), "{rows:?}");
+    assert!(rows.iter().all(|r| r.contains(",lab-lvm,")), "{rows:?}");
     assert!(rows.iter().any(|r| r.contains("linux:sudoers:nopasswd") && r.contains("/opt/lab/lvm/sudo_v2.sh")), "{rows:?}");
 }
 
@@ -157,7 +157,7 @@ fn get_linux_persistence_action_also_reads_images() {
     assert!(o.status.success());
     let rows = std::fs::read_to_string(&out).unwrap().lines().count() - 1;
     assert!(rows >= 12, "{rows}");
-    let o = std::process::Command::new(env!("CARGO_BIN_EXE_faramir")).arg("-f").arg(&img).arg("-o").arg(&d.join("none.csv")).arg("--silent").arg("get-run").output().unwrap();
+    let o = std::process::Command::new(env!("CARGO_BIN_EXE_faramir")).arg("-f").arg(&img).arg("-o").arg(d.join("none.csv")).arg("--silent").arg("get-run").output().unwrap();
     assert!(o.status.success());
     assert_eq!(std::fs::read_to_string(d.join("none.csv")).unwrap().lines().count(), 1, "a Windows-only action yields nothing from a Linux image");
 }
