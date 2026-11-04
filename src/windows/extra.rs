@@ -474,13 +474,15 @@ fn office_addins_of(app: &str, addins: &KeyNode, hive: &mut HiveFile, info: &Hiv
             None
         });
         let manifest = find_value(&a, "Manifest").and_then(string_value);
+        // what runs: the COM server, else the manifest, else only the ProgID is known
         let what = match (&dll, &manifest) {
-            (Some(d), _) => format!("{progid} ({friendly}) -> {d}"),
-            (None, Some(m)) => format!("{progid} ({friendly}) manifest {m}"),
-            (None, None) => format!("{progid} ({friendly})"),
+            (Some(d), _) => d.clone(),
+            (None, Some(m)) => m.clone(),
+            (None, None) => progid.clone(),
         };
-        out!("\t{app}: {what} LoadBehavior={load}");
-        out.push(persist(fmt_ts(a.timestamp()), technique, format!(r"{base}\{app}\Addins\{progid} LoadBehavior={load}"), what, access));
+        let label = if friendly.is_empty() { progid.clone() } else { format!("{progid} ({friendly})") };
+        out!("\t{app}: {label} -> {what} LoadBehavior={load}");
+        out.push(persist(fmt_ts(a.timestamp()), technique, format!(r"{base}\{app}\Addins\{label} LoadBehavior={load}"), what, access));
     }
     out
 }

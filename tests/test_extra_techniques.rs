@@ -282,9 +282,10 @@ fn office_addins_and_excel_open_entries() {
     let p = run(TechniqueId::OfficeAddins, &mut set);
     let v = values(&p);
     assert_eq!(v.len(), 4, "{v:?}");
-    assert!(v.iter().any(|x| x == r"Evil.Connect (Evil) -> C:\Users\bob\evil.dll"), "{v:?}");
+    assert!(v.iter().any(|x| x == r"C:\Users\bob\evil.dll"), "the value is what runs: {v:?}");
+    assert!(p.iter().any(|x| x.path.contains(r"Addins\Evil.Connect (Evil) LoadBehavior=3")), "the label is where it was found: {p:?}");
     assert!(v.iter().any(|x| x == r"/R C:\Users\bob\x.xll") && v.iter().any(|x| x == r"C:\Users\bob\y.xla"), "{v:?}");
-    assert!(v.iter().any(|x| x.contains("manifest https://evil.example/manifest.xml")), "{v:?}");
+    assert!(v.iter().any(|x| x == "https://evil.example/manifest.xml"), "{v:?}");
     assert!(!v.iter().any(|x| x.contains("Off.Connect")), "LoadBehavior 0 is disabled");
     assert!(p.iter().any(|x| x.path.contains("LoadBehavior=3")));
 }

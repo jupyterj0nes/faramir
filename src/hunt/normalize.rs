@@ -871,7 +871,26 @@ pub fn canonical(os: Os, technique: &str, command_lower: &str) -> String {
     }
     c = mask_sids(&c);
     c = mask_guids(&c);
+    if os == Os::Windows {
+        c = mask_versions(&c);
+    }
     format!("{}|{}", technique, c.split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
+/// `\platform\4.18.26100.4-0\` and `\16.0\` become `\<ver>\`: the same
+/// entry across updates. A folder is a version when it is digits, dots and
+/// dashes with at least one dot, starting with a digit.
+fn mask_versions(s: &str) -> String {
+    s.split('\\')
+        .map(|seg| {
+            let version = seg.len() >= 3
+                && seg.as_bytes()[0].is_ascii_digit()
+                && seg.contains('.')
+                && seg.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '-');
+            if version { "<ver>" } else { seg }
+        })
+        .collect::<Vec<_>>()
+        .join("\\")
 }
 
 fn mask_between(s: &str, prefix: &str, stop: char, with: &str) -> String {
@@ -951,6 +970,15 @@ pub fn normalize(index: usize, e: &Event) -> Row {
     let image_ext = ext_of(&image_name);
     let name_class = classify_name(&image_name);
     let canon = canonical(os, &technique, &command_lower);
+    // A TaskCache row whose task XML is not in the evidence carries the task's
+    // path (`\Microsoft\Windows\X\Y`), not a command: nothing is known to run,
+    // so no rule reads it as one. The identity keeps the path.
+    let bare_task = os == Os::Windows && technique == "scheduled_task" && command.starts_with('\\') && image_ext.is_empty();
+    let (command, command_lower, image, image_name, image_ext, family, name_class) = if bare_task {
+        (String::new(), String::new(), String::new(), String::new(), String::new(), DirFamily::Bare, classify_name(""))
+    } else {
+        (command, command_lower, image, image_name, image_ext, family, name_class)
+    };
     Row {
         index,
         host: e.computer.clone(),
@@ -1110,6 +1138,32 @@ mod tests {
         assert_eq!(classify_name(""), NameClass::Empty);
         assert_eq!(classify_name("Google Update.exe"), NameClass::Alpha);
         assert_eq!(classify_name("0anacron"), NameClass::AlphaDigits);
+    }
+
+    #[test]
+    fn versions_are_masked_and_a_bare_task_path_runs_nothing() {
+        assert_eq!(
+            canonical(Os::Windows, "windows_service", r"c:\programdata\microsoft\windows defender\platform\4.18.26100.4-0\msmpeng.exe"),
+            r"windows_service|c:\programdata\microsoft\windows defender\platform\<ver>\msmpeng.exe"
+        );
+        assert_eq!(canonical(Os::Windows, "x", r"c:\a\16.0\b.dll v2"), r"x|c:\a\<ver>\b.dll v2");
+        assert_eq!(canonical(Os::Windows, "x", r"c:\a\v4.0.30319\b.dll"), r"x|c:\a\v4.0.30319\b.dll", "a leading letter is a name, not a version");
+        let e = crate::event::Event {
+            timestamp: String::new(),
+            computer: "H".into(),
+            artifact: "windows:persistence:scheduled_task".into(),
+            event_id: 0,
+            pid: 0,
+            subject_username: String::new(),
+            target_username: String::new(),
+            processname: String::new(),
+            commandline: Some(r"\Microsoft\Windows\Workplace Join\Automatic-Device-Join".into()),
+            parentprocessname: String::new(),
+        };
+        let r = normalize(0, &e);
+        assert!(r.image.is_empty() && r.command.is_empty(), "{r:?}");
+        assert_eq!(r.family, DirFamily::Bare);
+        assert_eq!(r.canon, r"scheduled_task|\microsoft\windows\workplace join\automatic-device-join");
     }
 
     #[test]

@@ -255,10 +255,11 @@ fn cli_known_good_csv_from_a_clean_host() {
     assert_eq!(code, 0);
     assert!(err.contains("7005"), "{err}");
     let rows = csv_rows(&out);
-    // everything is vouched for, so nothing is merely a candidate; the high rules still fire
-    assert!(rows.iter().all(|r| r.get(14) != Some("candidate")), "{rows:?}");
-    assert!(rows.iter().any(|r| r.get(14) == Some("habitual") && r.get(15) == Some("0")), "{rows:?}");
-    assert!(rows.iter().any(|r| r.get(14) == Some("significant") && r.get(16).unwrap().contains("(high): ")), "a known-good CSV never cancels a high rule: {rows:?}");
+    // everything is vouched for by identity: habitual, score 0, whatever the rules say;
+    // the high rules still fire and keep their clause
+    let bad: Vec<_> = rows.iter().filter(|r| !(r.get(14) == Some("habitual") && r.get(15) == Some("0"))).collect();
+    assert!(bad.is_empty(), "{bad:?}");
+    assert!(rows.iter().any(|r| r.get(16).unwrap().contains("(high): ")), "the high rules still speak: {rows:?}");
     assert!(rows.iter().all(|r| r.get(16).unwrap().contains("in known-good CSV")), "{rows:?}");
     let (code, _, err) = run(&["-d", root.to_str().unwrap(), "-o", out.to_str().unwrap(), "--known-good", d.join("missing.csv").to_str().unwrap(), "--verbose"]);
     assert_eq!(code, 0);

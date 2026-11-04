@@ -1000,7 +1000,7 @@ pub fn get_runonceex(set: &mut HiveSet) -> Vec<Persistence> {
 pub fn get_image_file_execution_options(set: &mut HiveSet) -> Vec<Persistence> {
     out!("+ Getting Image File Execution Options");
     let technique = TechniqueId::ImageFileExecutionOptions.label();
-    visit_roots(set, IFEO_ROOTS, technique, |_root, _info, key, hive| {
+    visit_roots(set, IFEO_ROOTS, technique, |root, _info, key, hive| {
         let mut entries = Vec::new();
         if let Ok(subkeys) = key.subkeys(hive) {
             for image_rc in subkeys.iter() {
@@ -1010,8 +1010,9 @@ pub fn get_image_file_execution_options(set: &mut HiveSet) -> Vec<Persistence> {
                     if s.trim().is_empty() {
                         continue;
                     }
-                    out!("\t{s}");
-                    entries.push(persist(ts.clone(), technique, s.clone(), s, "System/User"));
+                    out!("\t{} -> {s}", image.name());
+                    // the path names the hijacked image; the value is the debugger that runs instead
+                    entries.push(persist(ts.clone(), technique, format!(r"{}\{}\Debugger", root.path, image.name()), s, "System/User"));
                 }
             }
         }
@@ -1052,11 +1053,16 @@ fn debugger_entries(set: &mut HiveSet, roots: &[KeyRoot], technique: &str) -> Ve
                 entries.push(persist(ts.clone(), technique, format!(r"{}\{}", root.path, v.name()), data, root.access));
             }
         }
+        // subkeys hold per-process debuggers (WerFault Hangs); AeDebug's
+        // AutoExclusionList is a list of names with DWORD flags, not debuggers
         if let Ok(subkeys) = key.subkeys(hive) {
             for sub_rc in subkeys.iter() {
                 let sub = sub_rc.borrow();
                 let ts = fmt_ts(sub.timestamp());
                 for v in sub.values() {
+                    if !(v.name().eq_ignore_ascii_case("Debugger") || v.name().eq_ignore_ascii_case("ReflectDebugger")) {
+                        continue;
+                    }
                     let data = display_value(v);
                     out!("\t{}\\{} {data}", sub.name(), v.name());
                     entries.push(persist(ts.clone(), technique, format!(r"{}\{}\{}", root.path, sub.name(), v.name()), data, root.access));
@@ -1218,35 +1224,43 @@ pub fn get_startup_programs(startup_files: &[PathBuf]) -> Vec<Persistence> {
         .collect()
 }
 
+/// The text of a task XML file: Windows writes them in UTF-16 LE with a BOM;
+/// a hand-made one may be UTF-8.
+fn task_xml_text(bytes: &[u8]) -> String {
+    match bytes {
+        [0xFF, 0xFE, rest @ ..] => {
+            let units: Vec<u16> = rest.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+            String::from_utf16_lossy(&units)
+        }
+        [0xFE, 0xFF, rest @ ..] => {
+            let units: Vec<u16> = rest.chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect();
+            String::from_utf16_lossy(&units)
+        }
+        _ => String::from_utf8_lossy(bytes).into_owned(),
+    }
+}
+
 pub fn get_scheduled_tasks(set: &mut HiveSet, source_evidence: Option<&Path>) -> Vec<Persistence> {
     out!("+ Getting scheduled tasks.");
     let technique = TechniqueId::ScheduledTasks.label();
-    let mut result = visit_roots(set, TASKCACHE_ROOTS, technique, |root, _info, key, hive| {
-        let mut entries = Vec::new();
-        if let Ok(tasks) = key.subkeys(hive) {
-            for task_rc in tasks.iter() {
-                let task = task_rc.borrow();
-                if let Some(path_val) = find_value(&task, "Path").and_then(string_value) {
-                    out!("\t{path_val}");
-                    entries.push(persist(fmt_ts(task.timestamp()), technique, format!(r"{}\{}", root.path, task.name()), path_val, root.access));
-                }
-            }
-        }
-        entries
-    });
-
+    // the task XML files first: their command is what a TaskCache row runs
+    let mut xml_rows: Vec<Persistence> = Vec::new();
+    let mut commands: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     if let Some(source) = source_evidence {
         for entry in WalkDir::new(source).into_iter().flatten() {
             let path = entry.path();
+            // `Tasks\X`, `Tasks\Microsoft\Windows\X\Y`: any folder of the tree under a `Tasks`
+            // folder inside the evidence (most Microsoft tasks are nested)
             let in_tasks = path
-                .parent()
-                .and_then(|p| p.file_name())
-                .map(|n| n.to_string_lossy().eq_ignore_ascii_case("Tasks"))
-                .unwrap_or(false);
+                .ancestors()
+                .skip(1)
+                .take_while(|p| *p != source)
+                .any(|p| p.file_name().map(|n| n.to_string_lossy().eq_ignore_ascii_case("Tasks")).unwrap_or(false));
             if !path.is_file() || !in_tasks {
                 continue;
             }
-            let Ok(content) = std::fs::read_to_string(path) else { continue };
+            let Ok(bytes) = std::fs::read(path) else { continue };
+            let content = task_xml_text(&bytes);
             let doc = match roxmltree::Document::parse(&content) {
                 Ok(d) => d,
                 Err(e) => {
@@ -1274,6 +1288,14 @@ pub fn get_scheduled_tasks(set: &mut HiveSet, source_evidence: Option<&Path>) ->
                 .unwrap_or_default();
             let full_cmd = if args.is_empty() { command.clone() } else { format!("{command} {args}") };
             out!("\t{full_cmd}");
+            // `...\Tasks\Microsoft\Windows\X\Y` is the task `\Microsoft\Windows\X\Y`
+            let shown = path.to_string_lossy().replace('/', "\\");
+            let lower = shown.to_ascii_lowercase();
+            // the task's path is what follows the Tasks folder (the system one when it is there)
+            let at = ["\\system32\\tasks\\", "\\syswow64\\tasks\\"].iter().find_map(|m| lower.find(m).map(|i| i + m.len() - 1)).or_else(|| lower.find("\\tasks\\").map(|i| i + 6));
+            if let Some(i) = at {
+                commands.insert(lower[i..].to_string(), full_cmd.clone());
+            }
             let mut p = persist(
                 file_mtime_string(path, false),
                 "Scheduled Task (XML)",
@@ -1282,9 +1304,25 @@ pub fn get_scheduled_tasks(set: &mut HiveSet, source_evidence: Option<&Path>) ->
                 "System",
             );
             p.origin = path.to_string_lossy().to_string();
-            result.push(p);
+            xml_rows.push(p);
         }
     }
+    let mut result = visit_roots(set, TASKCACHE_ROOTS, technique, |root, _info, key, hive| {
+        let mut entries = Vec::new();
+        if let Ok(tasks) = key.subkeys(hive) {
+            for task_rc in tasks.iter() {
+                let task = task_rc.borrow();
+                if let Some(path_val) = find_value(&task, "Path").and_then(string_value) {
+                    // the command of its XML when the Tasks folder is in the evidence, else the task's path
+                    let what = commands.get(&path_val.to_ascii_lowercase()).cloned().unwrap_or_else(|| path_val.clone());
+                    out!("\t{path_val} -> {what}");
+                    entries.push(persist(fmt_ts(task.timestamp()), technique, format!(r"{}\{} ({})", root.path, task.name(), path_val), what, root.access));
+                }
+            }
+        }
+        entries
+    });
+    result.extend(xml_rows);
     result
 }
 

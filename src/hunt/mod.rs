@@ -195,6 +195,8 @@ pub struct HuntReport {
     pub not_evaluated: usize,
     pub clean: usize,
     pub stock: usize,
+    /// Rows the clean reference hosts carry.
+    pub reference: usize,
     pub known_good: usize,
     pub after_baseline: usize,
     pub hosts: usize,
@@ -210,7 +212,7 @@ impl HuntReport {
     /// One line for the console and the diagnostics.
     pub fn summary_line(&self) -> String {
         format!(
-            "{} row(s): {} significant ({} by a high rule), {} candidate ({} by a medium rule), {} habitual, {} baseline, {} not evaluated; {} stock, {} known-good; {} host(s), {} tested statistically, {} at or below alpha",
+            "{} row(s): {} significant ({} by a high rule), {} candidate ({} by a medium rule), {} habitual, {} baseline, {} not evaluated; {} stock, {} on the clean reference, {} known-good; {} host(s), {} tested statistically, {} at or below alpha",
             self.rows,
             self.significant,
             self.rule_high,
@@ -220,6 +222,7 @@ impl HuntReport {
             self.baseline,
             self.not_evaluated,
             self.stock,
+            self.reference,
             self.known_good,
             self.hosts,
             self.tested,
@@ -260,6 +263,7 @@ pub fn evaluate(events: &[Event], settings: &HuntSettings) -> (Vec<Verdict>, Hun
     let rows: Vec<Row> = events.iter().enumerate().map(|(i, e)| normalize(i, e)).collect();
 
     let (kg, kg_errors) = KnownGood::load(&settings.known_good);
+    let kg = kg.with_reference();
     for e in kg_errors {
         diag::record(e);
     }
@@ -271,8 +275,8 @@ pub fn evaluate(events: &[Event], settings: &HuntSettings) -> (Vec<Verdict>, Hun
     }
 
     let stock: Vec<Option<&'static str>> = rows.iter().map(known_good::stock_reason).collect();
-    let in_kg: Vec<bool> = rows.iter().map(|r| kg.contains(r)).collect();
-    let exempt: Vec<bool> = stock.iter().zip(&in_kg).map(|(s, k)| s.is_some() || *k).collect();
+    let in_kg: Vec<Option<&'static str>> = rows.iter().map(|r| kg.reason(r)).collect();
+    let exempt: Vec<bool> = stock.iter().zip(&in_kg).map(|(s, k)| s.is_some() || k.is_some()).collect();
     let matched: Vec<Vec<&'static Rule>> = rows.iter().map(rules::matching).collect();
 
     let (stats, rar) = rarity::rarity(&rows, settings.baseline, &exempt, settings.alpha);
@@ -304,8 +308,13 @@ pub fn evaluate(events: &[Event], settings: &HuntSettings) -> (Vec<Verdict>, Hun
         let mut fired = matched[i].clone();
         fired.sort_by_key(|r| std::cmp::Reverse(r.level));
         let counting: Vec<&'static Rule> = fired.iter().copied().filter(|r| measured::counts(r.id, row.os)).collect();
-        for rule in &counting {
-            points += measured::points(rule.id, row.os);
+        // an entry a clean host carries, or the analyst's known-good CSV: its
+        // rules keep their clause and add nothing
+        let clean = in_kg[i].is_some();
+        if !clean {
+            for rule in &counting {
+                points += measured::points(rule.id, row.os);
+            }
         }
         for rule in &fired {
             reasons.push(format!("rule {} ({}): {} [{}]", rule.id, rule.level.label(), rule.title, rule.attack));
@@ -314,7 +323,7 @@ pub fn evaluate(events: &[Event], settings: &HuntSettings) -> (Vec<Verdict>, Hun
         let vouched = exempt[i];
         let st = &stats[i];
         let after_baseline = settings.baseline.is_some_and(|b| row.ts.is_none_or(|t| t >= b)) && row.state == State::Live;
-        let review_floor = (after_baseline && !vouched) || row.state != State::Live;
+        let review_floor = (after_baseline && !vouched) || (row.state != State::Live && !clean);
 
         // what the statistics (and the row's state) say
         let by_test = if st.significant {
@@ -328,13 +337,15 @@ pub fn evaluate(events: &[Event], settings: &HuntSettings) -> (Vec<Verdict>, Hun
         } else {
             Hunt::NotEvaluated
         };
-        // what the rules say: a high rule is `significant` whatever vouches
-        // for the entry; a medium rule is `candidate` unless the entry is
-        // stock or known good; a low rule leaves the test's state alone, and
-        // on a row no test judged it gives `candidate`, so a score never comes
-        // without a state
+        // what the rules say: a high rule is `significant` whatever the stock
+        // pattern list says; a medium rule is `candidate` unless the entry is
+        // stock; a low rule leaves the test's state alone, and on a row no
+        // test judged it gives `candidate`, so a score never comes without a
+        // state. An entry the clean reference hosts or the known-good CSV
+        // carry is vouched for by identity: no rule changes its state.
         let strongest = counting.first().map(|r| r.level);
         let by_rule = match strongest {
+            _ if clean => None,
             Some(Level::High) => Some(Hunt::Significant),
             Some(Level::Medium) if !vouched => Some(Hunt::Candidate),
             Some(Level::Low) if !vouched && by_test == Hunt::NotEvaluated => Some(Hunt::Candidate),
@@ -392,9 +403,13 @@ pub fn evaluate(events: &[Event], settings: &HuntSettings) -> (Vec<Verdict>, Hun
             reasons.push(s.to_string());
             report.stock += 1;
         }
-        if in_kg[i] {
-            reasons.push("in known-good CSV".to_string());
-            report.known_good += 1;
+        if let Some(why) = in_kg[i] {
+            reasons.push(why.to_string());
+            if why == known_good::REFERENCE_REASON {
+                report.reference += 1;
+            } else {
+                report.known_good += 1;
+            }
         }
         match st.role {
             rarity::Role::Baseline => reasons.push("before the baseline".to_string()),
@@ -450,6 +465,27 @@ mod tests {
             commandline: Some(cmd.into()),
             parentprocessname: "x".into(),
         }
+    }
+
+    #[test]
+    fn a_known_good_entry_is_habitual_whatever_its_rules() {
+        diag::clear();
+        let dir = std::env::temp_dir().join(format!("faramir_kg_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let csv = dir.join("clean.csv");
+        std::fs::write(&csv, "event_type,detail\nwindows:persistence:registry_run_key,\"mshta http://x/a.hta\"\n").unwrap();
+        let events = vec![
+            ev("H", "windows:persistence:registry_run_key", "mshta http://x/a.hta", "2026-10-28 12:00:00.000"),
+            ev("H", "windows:persistence:registry_run_key", "mshta http://y/b.hta", "2026-10-28 12:00:00.000"),
+        ];
+        let settings = HuntSettings { known_good: vec![csv.clone()], ..HuntSettings::default() };
+        let (v, report) = evaluate(&events, &settings);
+        assert_eq!(v[0].hunt, Hunt::Habitual, "{:?}", v[0]);
+        assert_eq!(v[0].score, 0);
+        assert!(v[0].hunt_why().starts_with("rule H") && v[0].hunt_why().ends_with(known_good::CSV_REASON), "{}", v[0].hunt_why());
+        assert_eq!(v[1].hunt, Hunt::Significant, "the same high rule on an entry nothing vouches for: {:?}", v[1]);
+        assert_eq!(report.known_good, 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

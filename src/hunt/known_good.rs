@@ -874,25 +874,66 @@ pub fn stock_reason(row: &Row) -> Option<&'static str> {
     }
 }
 
-/// Entries the analyst vouches for: faramir CSVs from clean hosts.
+/// Entries something vouches for by identity: the clean reference hosts built
+/// into the binary (`clean/windows.csv`, `clean/linux.csv`, what the lab's
+/// stock Server 2016 and Ubuntu 22.04 hosts carried, measured by
+/// `scripts/measure_clean.py`) and the analyst's own faramir CSVs from clean
+/// hosts (`--known-good`). An entry here is `habitual` whatever its rules say:
+/// a clean machine has it, so every reading of it is benign. The rules keep
+/// their clause, add no points and give no state. (The stock pattern list
+/// above is weaker: it is opinion, and a high rule overrides it.)
 #[derive(Debug, Default, Clone)]
 pub struct KnownGood {
+    /// From the analyst's CSVs.
     canons: HashSet<String>,
+    /// From the clean reference hosts.
+    reference: HashSet<String>,
     pub files: usize,
     pub rows: usize,
+    pub reference_rows: usize,
 }
+
+/// What the clean reference hosts were (the `REFERENCE_*` of `measured.rs`
+/// describe the same collections).
+pub const REFERENCE_REASON: &str = "on the clean reference hosts";
+pub const CSV_REASON: &str = "in known-good CSV";
 
 impl KnownGood {
     pub fn is_empty(&self) -> bool {
-        self.canons.is_empty()
+        self.canons.is_empty() && self.reference.is_empty()
     }
 
     pub fn contains(&self, row: &Row) -> bool {
-        self.canons.contains(&row.canon)
+        self.reason(row).is_some()
+    }
+
+    /// Why the entry is vouched for, when it is.
+    pub fn reason(&self, row: &Row) -> Option<&'static str> {
+        // the analyst's own CSV speaks first, the built-in reference after it
+        if self.canons.contains(&row.canon) {
+            Some(CSV_REASON)
+        } else if self.reference.contains(&row.canon) {
+            Some(REFERENCE_REASON)
+        } else {
+            None
+        }
     }
 
     pub fn insert_canon(&mut self, canon: String) {
         self.canons.insert(canon);
+    }
+
+    /// Adds the clean reference hosts built into the binary.
+    pub fn with_reference(mut self) -> Self {
+        let mut errors = Vec::new();
+        for (name, text) in [("clean/windows.csv", include_str!("clean/windows.csv")), ("clean/linux.csv", include_str!("clean/linux.csv"))] {
+            let rdr = csv::ReaderBuilder::new().has_headers(true).flexible(true).from_reader(text.as_bytes());
+            let mut set = HashSet::new();
+            self.reference_rows += Self::read(name, rdr, &mut set, &mut errors);
+            self.reference.extend(set);
+        }
+        debug_assert!(errors.is_empty(), "{errors:?}");
+        self
     }
 
     /// Load every file; problems are returned, never fatal.
@@ -901,19 +942,35 @@ impl KnownGood {
         let mut errors = Vec::new();
         for p in paths {
             let p = p.as_ref();
-            let mut rdr = match csv::ReaderBuilder::new().has_headers(true).flexible(true).from_path(p) {
+            let rdr = match csv::ReaderBuilder::new().has_headers(true).flexible(true).from_path(p) {
                 Ok(r) => r,
                 Err(e) => {
                     errors.push(FaramirError::HuntKnownGoodOpenFailed(format!("{}: {e}", p.display())));
                     continue;
                 }
             };
+            let mut set = HashSet::new();
+            let n = Self::read(&p.display().to_string(), rdr, &mut set, &mut errors);
+            kg.canons.extend(set);
+            kg.files += 1;
+            kg.rows += n;
+            errors.push(FaramirError::HuntKnownGoodLoaded(format!("{}: {n} row(s)", p.display())));
+        }
+        (kg, errors)
+    }
+
+    /// Reads one faramir CSV (masstin's names, or the ten-column names of
+    /// faramir 0.3 / caarea, or just `event_type,detail`) into a set of
+    /// identities. Returns the rows read.
+    fn read<R: std::io::Read>(name: &str, mut rdr: csv::Reader<R>, into: &mut HashSet<String>, errors: &mut Vec<FaramirError>) -> usize {
+        {
+            let p = name;
             let headers = rdr.headers().cloned().unwrap_or_default();
             // masstin's names (what faramir writes now) or the ten-column names of faramir 0.3 / caarea
             let col = |names: &[&str]| headers.iter().position(|h| names.iter().any(|n| h.trim().trim_matches('"').eq_ignore_ascii_case(n)));
             let (Some(ci_art), Some(ci_cmd)) = (col(&["event_type", "artifact"]), col(&["detail", "commandline"])) else {
-                errors.push(FaramirError::HuntKnownGoodOpenFailed(format!("{}: no event_type/detail (or artifact/commandline) columns", p.display())));
-                continue;
+                errors.push(FaramirError::HuntKnownGoodOpenFailed(format!("{}: no event_type/detail (or artifact/commandline) columns", p)));
+                return 0;
             };
             let ci_host = col(&["dst_computer", "computer"]);
             let ci_parent = col(&["log_filename", "parentprocessname"]);
@@ -923,7 +980,7 @@ impl KnownGood {
                 let rec = match rec {
                     Ok(r) => r,
                     Err(e) => {
-                        errors.push(FaramirError::HuntKnownGoodRowSkipped(format!("{} row {}: {e}", p.display(), i + 2)));
+                        errors.push(FaramirError::HuntKnownGoodRowSkipped(format!("{} row {}: {e}", p, i + 2)));
                         continue;
                     }
                 };
@@ -942,14 +999,11 @@ impl KnownGood {
                     parentprocessname: ci_parent.and_then(|c| rec.get(c)).unwrap_or("").to_string(),
                 };
                 let row = super::normalize::normalize(0, &e);
-                kg.canons.insert(row.canon);
+                into.insert(row.canon);
                 n += 1;
             }
-            kg.files += 1;
-            kg.rows += n;
-            errors.push(FaramirError::HuntKnownGoodLoaded(format!("{}: {n} row(s)", p.display())));
+            n
         }
-        (kg, errors)
     }
 }
 

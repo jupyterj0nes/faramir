@@ -171,9 +171,11 @@ fn ifeo_debugger_in_software_and_wow6432node() {
         .sz(r"Wow6432Node\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\notepad.exe", "Debugger", r"C:\evil32.exe")
         .dword(r"Microsoft\Windows NT\CurrentVersion\Image File Execution Options\benign.exe", "GlobalFlag", 0x200);
     let mut set = set_with(&d, &[("SOFTWARE", &sw)]);
-    let mut v = values(&run(TechniqueId::ImageFileExecutionOptions, &mut set));
+    let p = run(TechniqueId::ImageFileExecutionOptions, &mut set);
+    let mut v = values(&p);
     v.sort();
     assert_eq!(v, vec![r"C:\Windows\System32\cmd.exe", r"C:\evil32.exe"]);
+    assert!(p.iter().any(|x| x.value == r"C:\Windows\System32\cmd.exe" && x.path.ends_with(r"Image File Execution Options\sethc.exe\Debugger")), "the path names the hijacked image: {p:?}");
 }
 
 #[test]
@@ -191,12 +193,14 @@ fn aedebug_direct_value_and_subkeys() {
     let d = TempDir::new("t_aedebug");
     let mut sw = HiveBuilder::software();
     sw.sz(r"Microsoft\Windows NT\CurrentVersion\AeDebug", "Debugger", r"C:\evil\dbg.exe -p %ld")
-        .sz(r"Wow6432Node\Microsoft\Windows NT\CurrentVersion\AeDebug\Sub", "X", "y");
+        .sz(r"Wow6432Node\Microsoft\Windows NT\CurrentVersion\AeDebug\Sub", "Debugger", "y")
+        .dword(r"Microsoft\Windows NT\CurrentVersion\AeDebug\AutoExclusionList", "DWM.exe", 1);
     let mut set = set_with(&d, &[("SOFTWARE", &sw)]);
     let p = run(TechniqueId::AeDebug, &mut set);
     assert_eq!(p.len(), 2);
     assert!(p.iter().any(|x| x.value == r"C:\evil\dbg.exe -p %ld" && x.path.ends_with(r"AeDebug\Debugger")), "{p:?}");
-    assert!(p.iter().any(|x| x.value == "y" && x.path.ends_with(r"AeDebug\Sub\X")), "{p:?}");
+    assert!(p.iter().any(|x| x.value == "y" && x.path.ends_with(r"AeDebug\Sub\Debugger")), "{p:?}");
+    assert!(!p.iter().any(|x| x.path.contains("AutoExclusionList")), "a list of names with flags is not a debugger: {p:?}");
 }
 
 #[test]
@@ -588,11 +592,18 @@ fn scheduled_tasks_registry_and_xml() {
     );
     d.write("C/Windows/System32/Tasks/Broken", b"<Task><unclosed>");
     d.write("C/Windows/System32/Tasks/NoCommand", br#"<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Actions/></Task>"#);
+    // a nested task, registered in the TaskCache, in UTF-16 LE with a BOM as Windows
+    // writes them: the registry row carries its command
+    let xml = r#"<?xml version="1.0" encoding="UTF-16"?><Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Actions><Exec><Command>C:\nested.exe</Command></Exec></Actions></Task>"#;
+    let mut utf16 = vec![0xFFu8, 0xFE];
+    utf16.extend(xml.encode_utf16().flat_map(|u| u.to_le_bytes()));
+    d.write("C/Windows/System32/Tasks/Microsoft/Windows/Evil/Task", &utf16);
     diag::clear();
     let p = run_technique(TechniqueId::ScheduledTasks, &mut set, Some(&d.path));
-    assert_eq!(p.len(), 2);
-    assert!(p.iter().any(|x| x.technique == "Scheduled Task" && x.value == r"\Microsoft\Windows\Evil\Task" && x.path.contains(r"TaskCache\Tasks\")), "{p:?}");
+    assert_eq!(p.len(), 3, "{p:?}");
+    assert!(p.iter().any(|x| x.technique == "Scheduled Task" && x.value == r"C:\nested.exe" && x.path.contains(r"TaskCache\Tasks\") && x.path.ends_with(r"(\Microsoft\Windows\Evil\Task)")), "{p:?}");
     assert!(p.iter().any(|x| x.technique == "Scheduled Task (XML)" && x.value == r"C:\evil.exe -x"));
+    assert!(p.iter().any(|x| x.technique == "Scheduled Task (XML)" && x.value == r"C:\nested.exe"));
     assert!(diag::has("ERR_WIN_TASK_XML_PARSE"));
 }
 
