@@ -106,10 +106,11 @@ fn test_sudoers_multiple_nopasswd() {
 }
 
 #[test]
-fn test_sudoers_parent_is_sudo() {
+fn test_sudoers_source_file_is_the_sudoers_file() {
     let (p, _g) = create_temp_sudoers("u ALL=NOPASSWD: ALL\n");
     let evs = parse_sudoers_file(&p, "HOST").unwrap();
-    assert_eq!(evs[0].parentprocessname, "sudo");
+    assert!(evs[0].source_file.ends_with(p.file_name().unwrap().to_str().unwrap()), "source_file is the file the entry was read from: {}", evs[0].source_file);
+    assert!(evs[0].source_file.starts_with('/'), "{}", evs[0].source_file);
 }
 
 #[test]
@@ -134,11 +135,13 @@ fn test_sudoers_line_number_in_commandline() {
 }
 
 #[test]
-fn test_sudoers_filename_in_commandline() {
+fn test_sudoers_filename_in_source_file_not_in_commandline() {
     let (p, _g) = create_temp_sudoers("u ALL=NOPASSWD: ALL\n");
     let fname = p.file_name().unwrap().to_str().unwrap();
     let evs = parse_sudoers_file(&p, "HOST").unwrap();
-    assert!(evs[0].commandline.as_ref().unwrap().contains(fname));
+    assert!(evs[0].source_file.ends_with(fname), "{}", evs[0].source_file);
+    assert!(!evs[0].commandline.as_ref().unwrap().contains(fname), "the file has its own column: {:?}", evs[0].commandline);
+    assert!(evs[0].commandline.as_ref().unwrap().starts_with("Sudoers [line 1]: "), "{:?}", evs[0].commandline);
 }
 
 #[test]

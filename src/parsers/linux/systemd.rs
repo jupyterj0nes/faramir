@@ -91,7 +91,7 @@ pub fn parse_systemd_service(file_path: &Path, computer_name: &str) -> Result<Ve
             target_username: user.clone(),
             processname: proc_name,
             commandline: Some(format!("Systemd Unit: {} (Desc: {}, Exec: {})", filename, description, exec)),
-            parentprocessname: "systemd".to_string(),
+            source_file: super::evidence_path(file_path),
         });
     }
 
@@ -174,7 +174,7 @@ pub fn parse_systemd_timer(file_path: &Path, computer_name: &str) -> Result<Vec<
         target_username: "root".to_string(),
         processname: target.clone(),
         commandline: Some(format!("Systemd Timer: {} -> {} ({})", filename, target, schedule)),
-        parentprocessname: "systemd".to_string(),
+        source_file: super::evidence_path(file_path),
     }])
 }
 
@@ -248,7 +248,7 @@ pub fn parse_systemd_socket_or_path(file_path: &Path, computer_name: &str) -> Re
         target_username: "root".to_string(),
         processname: filename.to_string(),
         commandline: Some(format!("Systemd Activation [{}]: {}", filename, trigger)),
-        parentprocessname: "systemd".to_string(),
+        source_file: super::evidence_path(file_path),
     }])
 }
 
@@ -280,6 +280,6 @@ pub fn parse_systemd_generator(file_path: &Path, computer_name: &str) -> Result<
         target_username: "root".to_string(),
         processname: filename.to_string(),
         commandline: Some(format!("Systemd Generator Executable: {}", super::evidence_path(file_path))),
-        parentprocessname: "systemd".to_string(),
+        source_file: super::evidence_path(file_path),
     }])
 }

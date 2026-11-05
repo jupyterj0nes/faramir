@@ -12,5 +12,5 @@ pub struct Event {
     pub target_username: String,
     pub processname: String,
     pub commandline: Option<String>,
-    pub parentprocessname: String,
+    pub source_file: String,
 }

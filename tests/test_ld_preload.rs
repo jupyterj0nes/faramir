@@ -107,10 +107,11 @@ fn test_ld_preload_commandline_format() {
 }
 
 #[test]
-fn test_ld_preload_parentprocess_is_ld_so() {
+fn test_ld_preload_source_file_is_the_preload_file() {
     let (p, _g) = create_temp_preload("/tmp/hook.so\n");
     let evs = parse_ld_so_preload(&p, "HOST").unwrap();
-    assert_eq!(evs[0].parentprocessname, "ld.so");
+    assert!(evs[0].source_file.ends_with(p.file_name().unwrap().to_str().unwrap()), "source_file is the file the entry was read from: {}", evs[0].source_file);
+    assert!(evs[0].source_file.starts_with('/'), "{}", evs[0].source_file);
 }
 
 #[test]

@@ -22,6 +22,7 @@ pub use techniques::{run_all, run_technique, HiveSet, KeyRoot, Persistence, Root
 pub use vss::fold_vss_findings;
 
 use crate::event::Event;
+use std::path::Path;
 
 const EXECUTABLE_EXTENSIONS: &[&str] = &[
     ".exe", ".dll", ".bat", ".cmd", ".ps1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".scr", ".com", ".msi", ".ocx",
@@ -60,8 +61,53 @@ pub fn process_name_of(command: &str) -> String {
         .to_string()
 }
 
-/// Convert a persistence finding into the unified Caarea/Masstin timeline event.
+/// Convert a persistence finding into a timeline event. Paths in
+/// `source_file` are left as the engine stamped them; see
+/// [`persistence_to_event_in`] to make them relative to the evidence root.
 pub fn persistence_to_event(p: &Persistence, computer_name: &str) -> Event {
+    persistence_to_event_in(p, computer_name, None)
+}
+
+/// The `source_file` column of a finding: the file it was read from (the
+/// hive, the task XML, the profile, the carved hive), made relative to the
+/// evidence root when one is given, then `:` and the key inside it. A
+/// finding whose path is the file itself (a startup-folder entry, a script)
+/// gives the file alone; a finding stamped with no origin gives its path.
+pub fn source_file_of(p: &Persistence, root: Option<&Path>) -> String {
+    if p.origin.is_empty() {
+        return p.path.clone();
+    }
+    let origin = relative_to(&p.origin, root);
+    // the path may quote the file itself (a VSS or carved finding says which
+    // copy it came from): the machine's extraction folder has no place there
+    let path = match root {
+        Some(r) => {
+            let prefix = format!("{}{}", r.display(), std::path::MAIN_SEPARATOR);
+            p.path.replace(&prefix, "")
+        }
+        None => p.path.clone(),
+    };
+    if path.is_empty() || path == origin {
+        origin
+    } else if path.contains(&origin) {
+        path
+    } else {
+        format!("{origin}:{path}")
+    }
+}
+
+/// `path` relative to `root` when it lies under it, as text; unchanged otherwise.
+fn relative_to(path: &str, root: Option<&Path>) -> String {
+    match root.and_then(|r| Path::new(path).strip_prefix(r).ok()) {
+        Some(rel) if !rel.as_os_str().is_empty() => rel.to_string_lossy().to_string(),
+        _ => path.to_string(),
+    }
+}
+
+/// Convert a persistence finding into the timeline event, with the file in
+/// `source_file` relative to `root` (the evidence directory or the folder an
+/// image was extracted to), so the column reads the same on every machine.
+pub fn persistence_to_event_in(p: &Persistence, computer_name: &str, root: Option<&Path>) -> Event {
     let processname = process_name_of(&p.value);
 
     let clean_tech = p
@@ -90,6 +136,6 @@ pub fn persistence_to_event(p: &Persistence, computer_name: &str) -> Event {
         target_username: p.access_gained.clone(),
         processname,
         commandline: Some(p.value.clone()),
-        parentprocessname: p.path.clone(),
+        source_file: source_file_of(p, root),
     }
 }

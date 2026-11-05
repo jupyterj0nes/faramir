@@ -115,7 +115,7 @@ fn dedupe_key(e: &Event) -> String {
         e.subject_username,
         norm(&e.processname),
         norm(e.commandline.as_deref().unwrap_or("")),
-        norm(&e.parentprocessname)
+        norm(&e.source_file)
     )
 }
 
@@ -183,7 +183,7 @@ pub fn process_recovered(dir: &Path, computer_name: &str) -> Vec<Event> {
                     e.size,
                     if e.content_recovered { "" } else if e.blocks_reused { ", content blocks reused" } else { ", content not recovered" }
                 )),
-                parentprocessname: "ext4 journal".into(),
+                source_file: "ext4 journal".into(),
             });
         } else {
             for ev in &mut events {

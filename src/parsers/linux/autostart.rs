@@ -83,6 +83,6 @@ pub fn parse_xdg_desktop_file(file_path: &Path, computer_name: &str) -> Result<V
         target_username: "user".to_string(),
         processname: proc_name,
         commandline: Some(format!("XDG Autostart: {} ({}) -> {}", filename, name, exec)),
-        parentprocessname: "xdg-autostart".to_string(),
+        source_file: super::evidence_path(file_path),
     }])
 }

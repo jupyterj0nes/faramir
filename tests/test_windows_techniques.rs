@@ -921,7 +921,7 @@ fn persistence_to_event_mapping() {
     assert_eq!(e.artifact, "windows:persistence:registry_run_key");
     assert_eq!(e.processname, "u.exe");
     assert_eq!(e.commandline.as_deref(), Some(r"C:\evil\u.exe --silent"));
-    assert_eq!(e.parentprocessname, r"C:\ev\SOFTWARE");
+    assert_eq!(e.source_file, r"C:\ev\SOFTWARE");
     assert_eq!(e.subject_username, "System");
     assert_eq!(e.timestamp, p.timestamp);
     let bare = Persistence { value: "rundll32 x".into(), technique: "COM Object Hijacking".into(), ..Default::default() };

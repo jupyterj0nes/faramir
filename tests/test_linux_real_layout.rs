@@ -72,7 +72,7 @@ fn dedupe_keeps_the_first_copy_and_counts_the_rest() {
         target_username: "root".into(),
         processname: "g".into(),
         commandline: Some(cmd.into()),
-        parentprocessname: "systemd".into(),
+        source_file: "systemd".into(),
     };
     diag::clear();
     let out = dedupe_events(vec![mk("/usr/lib/systemd/system-generators/g"), mk("/lib/systemd/system-generators/g"), mk("/usr/sbin/g"), mk("/sbin/g"), mk("/opt/g")]);

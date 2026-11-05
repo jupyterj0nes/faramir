@@ -78,7 +78,7 @@ pub fn parse_ssh_authorized_keys(file_path: &Path, computer_name: &str) -> Resul
                 target_username: user.clone(),
                 processname: "sshd".to_string(),
                 commandline: Some(details),
-                parentprocessname: "sshd".to_string(),
+                source_file: super::evidence_path(file_path),
             });
         } else {
             return Err(LinuxPersistenceError::SshKeyInvalid(format!(
@@ -142,7 +142,7 @@ pub fn parse_sshd_config(file_path: &Path, computer_name: &str) -> Result<Vec<Ev
                 target_username: "root".to_string(),
                 processname: tokens.get(1).unwrap_or(&"sshd").to_string(),
                 commandline: Some(format!("sshd_config [line {}]: AuthorizedKeysCommand {}", line_idx + 1, val)),
-                parentprocessname: "sshd".to_string(),
+                source_file: super::evidence_path(file_path),
             });
         } else if key.eq_ignore_ascii_case("ForceCommand") && !val.eq_ignore_ascii_case("none") {
             events.push(Event {
@@ -155,7 +155,7 @@ pub fn parse_sshd_config(file_path: &Path, computer_name: &str) -> Result<Vec<Ev
                 target_username: "root".to_string(),
                 processname: tokens.get(1).unwrap_or(&"sshd").to_string(),
                 commandline: Some(format!("sshd_config [line {}]: ForceCommand {}", line_idx + 1, val)),
-                parentprocessname: "sshd".to_string(),
+                source_file: super::evidence_path(file_path),
             });
         }
     }

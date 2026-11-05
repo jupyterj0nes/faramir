@@ -122,10 +122,11 @@ fn test_pam_subject_root() {
 }
 
 #[test]
-fn test_pam_parent_is_pam() {
+fn test_pam_source_file_is_the_pam_file() {
     let (p, _g) = create_temp_pam("auth optional pam_exec.so /bin/cmd\n");
     let evs = parse_pam_file(&p, "HOST").unwrap();
-    assert_eq!(evs[0].parentprocessname, "pam");
+    assert!(evs[0].source_file.ends_with(p.file_name().unwrap().to_str().unwrap()), "source_file is the file the entry was read from: {}", evs[0].source_file);
+    assert!(evs[0].source_file.starts_with('/'), "{}", evs[0].source_file);
 }
 
 #[test]

@@ -817,7 +817,7 @@ mod tests {
             target_username: "User".into(),
             processname: String::new(),
             commandline: Some(cmd.into()),
-            parentprocessname: "where".into(),
+            source_file: "where".into(),
         };
         normalize(0, &e)
     }
@@ -933,7 +933,7 @@ mod tests {
             target_username: "System".into(),
             processname: String::new(),
             commandline: Some("C:\\ProgramData\\upd\\upd.exe".into()),
-            parentprocessname: "\\Upd".into(),
+            source_file: "\\Upd".into(),
         };
         let r = normalize(0, &e);
         assert!(matching(&r).iter().any(|x| x.id == "H1015"));

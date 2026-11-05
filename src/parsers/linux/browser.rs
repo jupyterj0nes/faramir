@@ -42,7 +42,7 @@ fn to_event(e: &ExtensionRecord, computer_name: &str) -> Event {
         target_username: user,
         processname: e.browser.to_lowercase(),
         commandline: Some(format!("{} [profile {}] {}", e.summary(), e.profile, super::evidence_path(Path::new(&e.file)))),
-        parentprocessname: e.browser.clone(),
+        source_file: super::evidence_path(Path::new(&e.file)),
     }
 }
 

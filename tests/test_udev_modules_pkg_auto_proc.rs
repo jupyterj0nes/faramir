@@ -93,10 +93,11 @@ fn test_udev_subject_root() {
 }
 
 #[test]
-fn test_udev_parent_is_udevd() {
+fn test_udev_source_file_is_the_rules_file() {
     let (p, _g) = create_temp_file("RUN+=\"/bin/cmd\"\n", "rules");
     let evs = parse_udev_rule_file(&p, "HOST").unwrap();
-    assert_eq!(evs[0].parentprocessname, "udevd");
+    assert!(evs[0].source_file.ends_with(p.file_name().unwrap().to_str().unwrap()), "source_file is the file the entry was read from: {}", evs[0].source_file);
+    assert!(evs[0].source_file.starts_with('/'), "{}", evs[0].source_file);
 }
 
 #[test]
@@ -231,10 +232,11 @@ fn test_modules_with_options() {
 }
 
 #[test]
-fn test_modules_parent_is_kernel() {
+fn test_modules_source_file_is_the_modules_file() {
     let (p, _g) = create_temp_file("lp\n", "modules");
     let evs = parse_kernel_modules_config(&p, "HOST").unwrap();
-    assert_eq!(evs[0].parentprocessname, "kernel");
+    assert!(evs[0].source_file.ends_with(p.file_name().unwrap().to_str().unwrap()), "source_file is the file the entry was read from: {}", evs[0].source_file);
+    assert!(evs[0].source_file.starts_with('/'), "{}", evs[0].source_file);
 }
 
 #[test]
@@ -283,7 +285,7 @@ fn test_modules_modprobe_multiple_installs() {
 }
 
 #[test]
-fn test_modules_modprobe_parent_is_modprobe() {
+fn test_modules_modprobe_source_file_is_the_conf() {
     let path = std::env::temp_dir().join(format!("modprobe.d_p_{}.conf", std::process::id()));
     {
         let mut f = File::create(&path).unwrap();
@@ -291,7 +293,8 @@ fn test_modules_modprobe_parent_is_modprobe() {
     }
     let evs = parse_kernel_modules_config(&path, "HOST").unwrap();
     let _ = std::fs::remove_file(&path);
-    assert_eq!(evs[0].parentprocessname, "modprobe");
+    assert!(evs[0].source_file.ends_with(path.file_name().unwrap().to_str().unwrap()), "source_file is the file the entry was read from: {}", evs[0].source_file);
+    assert!(evs[0].source_file.starts_with('/'), "{}", evs[0].source_file);
 }
 
 #[test]
@@ -330,11 +333,12 @@ fn test_modules_target_user_root() {
 }
 
 #[test]
-fn test_modules_filename_in_commandline() {
+fn test_modules_filename_in_source_file_not_in_commandline() {
     let (p, _g) = create_temp_file("m1\n", "modules");
     let fname = p.file_name().unwrap().to_str().unwrap();
     let evs = parse_kernel_modules_config(&p, "HOST").unwrap();
-    assert!(evs[0].commandline.as_ref().unwrap().contains(fname));
+    assert!(evs[0].source_file.ends_with(fname), "{}", evs[0].source_file);
+    assert_eq!(evs[0].commandline.as_deref(), Some("Kernel Auto-load Module: m1"), "the file has its own column");
 }
 
 #[test]
@@ -418,10 +422,11 @@ fn test_pkg_apt_subject_root() {
 }
 
 #[test]
-fn test_pkg_apt_parent_is_apt() {
+fn test_pkg_apt_source_file_is_the_hook_file() {
     let (p, _g) = create_temp_file("APT::Update::Post-Invoke {\"/bin/true\"};\n", "conf");
     let evs = parse_apt_hook_file(&p, "HOST").unwrap();
-    assert_eq!(evs[0].parentprocessname, "apt");
+    assert!(evs[0].source_file.ends_with(p.file_name().unwrap().to_str().unwrap()), "source_file is the file the entry was read from: {}", evs[0].source_file);
+    assert!(evs[0].source_file.starts_with('/'), "{}", evs[0].source_file);
 }
 
 #[test]
@@ -574,10 +579,11 @@ fn test_autostart_target_user() {
 }
 
 #[test]
-fn test_autostart_parent_is_xdg() {
+fn test_autostart_source_file_is_the_desktop_file() {
     let (p, _g) = create_temp_file("[Desktop Entry]\nExec=/bin/cmd\n", "desktop");
     let evs = parse_xdg_desktop_file(&p, "HOST").unwrap();
-    assert_eq!(evs[0].parentprocessname, "xdg-autostart");
+    assert!(evs[0].source_file.ends_with(p.file_name().unwrap().to_str().unwrap()), "source_file is the file the entry was read from: {}", evs[0].source_file);
+    assert!(evs[0].source_file.starts_with('/'), "{}", evs[0].source_file);
 }
 
 #[test]
@@ -745,10 +751,11 @@ fn test_proc_multiple_deleted() {
 }
 
 #[test]
-fn test_proc_parent_is_proc() {
+fn test_proc_source_file_is_the_listing() {
     let (p, _g) = create_temp_file("/proc/10/exe -> /tmp/x\n", "txt");
     let evs = parse_running_processes_file(&p, "HOST").unwrap();
-    assert_eq!(evs[0].parentprocessname, "proc");
+    assert!(evs[0].source_file.ends_with(p.file_name().unwrap().to_str().unwrap()), "source_file is the file the entry was read from: {}", evs[0].source_file);
+    assert!(evs[0].source_file.starts_with('/'), "{}", evs[0].source_file);
 }
 
 #[test]

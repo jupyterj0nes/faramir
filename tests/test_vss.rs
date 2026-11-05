@@ -132,5 +132,5 @@ fn end_to_end_live_and_snapshot_hives() {
     assert!(stub.source.starts_with("vss:1:"));
     let e = persistence_to_event(wiped, "HOST");
     assert_eq!(e.artifact, "windows:persistence:removed_since_vss:registry_run_key");
-    assert!(e.parentprocessname.contains("2026-03-01 10:00:00 UTC"));
+    assert!(e.source_file.contains("2026-03-01 10:00:00 UTC"));
 }

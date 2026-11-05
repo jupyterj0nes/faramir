@@ -42,7 +42,6 @@ pub fn parse_pam_file(file_path: &Path, computer_name: &str) -> Result<Vec<Event
         })
         .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
-    let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let reader = BufReader::new(file);
     let mut events = Vec::new();
     // module types that already have a line above the current one
@@ -90,8 +89,8 @@ pub fn parse_pam_file(file_path: &Path, computer_name: &str) -> Result<Vec<Event
                 subject_username: "root".to_string(),
                 target_username: "root".to_string(),
                 processname: "pam_exec.so".to_string(),
-                commandline: Some(format!("PAM [{} line {}]: {} {} {} {}", filename, line_idx + 1, module_type, control, module_path, args)),
-                parentprocessname: "pam".to_string(),
+                commandline: Some(format!("PAM [line {}]: {} {} {} {}", line_idx + 1, module_type, control, module_path, args)),
+                source_file: super::evidence_path(file_path),
             });
         } else if module_path.contains("pam_permit.so")
             && (module_type == "auth" || module_type == "account")
@@ -106,8 +105,8 @@ pub fn parse_pam_file(file_path: &Path, computer_name: &str) -> Result<Vec<Event
                 subject_username: "root".to_string(),
                 target_username: "root".to_string(),
                 processname: "pam_permit.so".to_string(),
-                commandline: Some(format!("PAM Bypass [{} line {}]: {} {} {}", filename, line_idx + 1, module_type, control, module_path)),
-                parentprocessname: "pam".to_string(),
+                commandline: Some(format!("PAM Bypass [line {}]: {} {} {}", line_idx + 1, module_type, control, module_path)),
+                source_file: super::evidence_path(file_path),
             });
         } else if module_path.starts_with('/') && !module_path.starts_with("/lib/security")
             && !module_path.starts_with("/lib64/security")
@@ -123,8 +122,8 @@ pub fn parse_pam_file(file_path: &Path, computer_name: &str) -> Result<Vec<Event
                 subject_username: "root".to_string(),
                 target_username: "root".to_string(),
                 processname: module_path.to_string(),
-                commandline: Some(format!("PAM Rogue Module [{} line {}]: {}", filename, line_idx + 1, trimmed)),
-                parentprocessname: "pam".to_string(),
+                commandline: Some(format!("PAM Rogue Module [line {}]: {}", line_idx + 1, trimmed)),
+                source_file: super::evidence_path(file_path),
             });
         }
     }

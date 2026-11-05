@@ -61,7 +61,7 @@ impl Marks {
                 }
             };
             if header.len() < BASE_COLUMNS.len() || header.iter().take(BASE_COLUMNS.len()).zip(BASE_COLUMNS).any(|(a, b)| a != b) {
-                errors.push(FaramirError::HuntMarksNotTimeline(format!("{shown}: the header does not start with the 14 event columns (time_created … log_filename)")));
+                errors.push(FaramirError::HuntMarksNotTimeline(format!("{shown}: the header does not start with the 14 event columns (timestamp … source_file)")));
                 continue;
             }
             let (vi, ni) = match (header.iter().position(|c| c == "verdict"), header.iter().position(|c| c == "notes")) {
@@ -141,7 +141,7 @@ mod tests {
         let p = tmp("ok.csv");
         std::fs::write(
             &p,
-            "time_created,dst_computer,event_type,event_id,logon_type,target_user_name,target_domain_name,src_computer,src_ip,subject_user_name,subject_domain_name,logon_id,detail,log_filename,hunt,hunt_score,hunt_why,verdict,notes\n\
+            "timestamp,computer,artifact,event_id,state,target_username,reserved_1,processname,reserved_2,subject_username,reserved_3,pid,commandline,source_file,hunt,hunt_score,hunt_why,verdict,notes\n\
              2026-10-28 12:00:00.000,H,linux:cron:system_job,0,\"\",root,\"\",\"\",\"\",root,\"\",\"\",/tmp/.x/run.sh,crond,significant,90,rule H3001 (high): x,confirmed,#ir-4711\n\
              2026-10-28 12:00:00.000,H,linux:cron:system_job,0,\"\",root,\"\",\"\",\"\",root,\"\",\"\",/usr/bin/x,crond,,,,,\n\
              2026-10-28 12:00:00.000,H,linux:cron:system_job,0,\"\",root,\"\",\"\",\"\",root,\"\",\"\",/usr/bin/y,crond,habitual,0,stock Linux entry,,seen before\n",

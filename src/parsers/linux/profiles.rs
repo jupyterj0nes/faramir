@@ -133,7 +133,7 @@ pub fn parse_shell_script(file_path: &Path, computer_name: &str) -> Result<Vec<E
                     target_username: "root".to_string(),
                     processname: proc_name,
                     commandline: Some(format!("rc.local [line {}]: {}", line_idx + 1, trimmed)),
-                    parentprocessname: "init".to_string(),
+                    source_file: super::evidence_path(file_path),
                 });
             }
         } else if let Some(indicator) = evaluate_shell_line(trimmed) {
@@ -148,7 +148,7 @@ pub fn parse_shell_script(file_path: &Path, computer_name: &str) -> Result<Vec<E
                 target_username: "user".to_string(),
                 processname: proc_name,
                 commandline: Some(format!("{} [line {}]: {}", filename, line_idx + 1, trimmed)),
-                parentprocessname: "shell".to_string(),
+                source_file: super::evidence_path(file_path),
             });
         }
     }

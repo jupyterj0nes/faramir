@@ -371,9 +371,10 @@ fn test_systemd_service_exec_with_multiple_spaces() {
 }
 
 #[test]
-fn test_systemd_service_parentprocess_is_systemd() {
+fn test_systemd_service_source_file_is_the_unit() {
     let content = "[Service]\nExecStart=/bin/cmd\n";
     let (p, _g) = create_temp_unit(content, "service");
     let evs = parse_systemd_service(&p, "HOST").unwrap();
-    assert_eq!(evs[0].parentprocessname, "systemd");
+    assert!(evs[0].source_file.ends_with(p.file_name().unwrap().to_str().unwrap()), "source_file is the file the entry was read from: {}", evs[0].source_file);
+    assert!(evs[0].source_file.starts_with('/'), "{}", evs[0].source_file);
 }

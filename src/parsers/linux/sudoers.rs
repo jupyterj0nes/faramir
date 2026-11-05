@@ -26,7 +26,6 @@ pub fn parse_sudoers_file(file_path: &Path, computer_name: &str) -> Result<Vec<E
         })
         .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
-    let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let reader = BufReader::new(file);
     let mut events = Vec::new();
 
@@ -50,8 +49,8 @@ pub fn parse_sudoers_file(file_path: &Path, computer_name: &str) -> Result<Vec<E
                 subject_username: user.to_string(),
                 target_username: "root".to_string(),
                 processname: "sudo".to_string(),
-                commandline: Some(format!("Sudoers [{} line {}]: {}", filename, line_idx + 1, trimmed)),
-                parentprocessname: "sudo".to_string(),
+                commandline: Some(format!("Sudoers [line {}]: {}", line_idx + 1, trimmed)),
+                source_file: super::evidence_path(file_path),
             });
         } else if trimmed.starts_with("Defaults") && (trimmed.contains("env_keep") || trimmed.contains("!lecture")) {
             events.push(Event {
@@ -63,8 +62,8 @@ pub fn parse_sudoers_file(file_path: &Path, computer_name: &str) -> Result<Vec<E
                 subject_username: "root".to_string(),
                 target_username: "root".to_string(),
                 processname: "sudo".to_string(),
-                commandline: Some(format!("Sudoers Defaults [{} line {}]: {}", filename, line_idx + 1, trimmed)),
-                parentprocessname: "sudo".to_string(),
+                commandline: Some(format!("Sudoers Defaults [line {}]: {}", line_idx + 1, trimmed)),
+                source_file: super::evidence_path(file_path),
             });
         }
     }

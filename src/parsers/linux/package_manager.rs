@@ -26,7 +26,6 @@ pub fn parse_apt_hook_file(file_path: &Path, computer_name: &str) -> Result<Vec<
         })
         .unwrap_or_else(|| "1970-01-01 00:00:00.000".to_string());
 
-    let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let reader = BufReader::new(file);
     let mut events = Vec::new();
 
@@ -59,8 +58,8 @@ pub fn parse_apt_hook_file(file_path: &Path, computer_name: &str) -> Result<Vec<
                 subject_username: "root".to_string(),
                 target_username: "root".to_string(),
                 processname: proc_name,
-                commandline: Some(format!("APT Hook [{} line {}]: {}", filename, line_idx + 1, trimmed)),
-                parentprocessname: "apt".to_string(),
+                commandline: Some(format!("APT Hook [line {}]: {}", line_idx + 1, trimmed)),
+                source_file: super::evidence_path(file_path),
             });
         }
     }

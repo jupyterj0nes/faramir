@@ -463,7 +463,7 @@ mod tests {
             target_username: "System".into(),
             processname: String::new(),
             commandline: Some(cmd.into()),
-            parentprocessname: "x".into(),
+            source_file: "x".into(),
         }
     }
 

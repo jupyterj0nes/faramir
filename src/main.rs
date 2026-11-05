@@ -192,7 +192,7 @@ struct Args {
     no_hunt: bool,
 
     /// Earlier faramir CSV of the same evidence: its verdict and notes are
-    /// copied onto every row with the same ten event columns. Repeatable.
+    /// copied onto every row with the same 14 event columns. Repeatable.
     #[arg(long = "carry-marks", value_name = "CSV")]
     carry_marks: Vec<PathBuf>,
 
@@ -284,7 +284,7 @@ fn process_target_directory(
         }
         let persistences = windows::fold_vss_findings(run_windows(&mut set, action, path));
         for p in &persistences {
-            all_events.push(windows::persistence_to_event(p, &hostname));
+            all_events.push(windows::persistence_to_event_in(p, &hostname, Some(path)));
         }
         return persistences;
     }
@@ -316,7 +316,7 @@ fn process_target_directory(
             println!("🕰️  {} persistence item(s) exist only in Volume Shadow Copies (removed from the live volume)", removed);
         }
         for p in &persistences {
-            all_events.push(windows::persistence_to_event(p, &hostname));
+            all_events.push(windows::persistence_to_event_in(p, &hostname, Some(path)));
         }
         return persistences;
     }
@@ -366,7 +366,7 @@ fn carve_and_process(
         );
     }
     for p in &tagged {
-        all_events.push(windows::persistence_to_event(p, hostname));
+        all_events.push(windows::persistence_to_event_in(p, hostname, Some(&carved_dir)));
     }
 }
 
@@ -536,7 +536,7 @@ fn main() -> Result<()> {
             }
             let persistences = run_windows(&mut set, &args.action, &parent);
             for p in &persistences {
-                all_events.push(windows::persistence_to_event(p, hostname));
+                all_events.push(windows::persistence_to_event_in(p, hostname, Some(&parent)));
             }
         }
     }

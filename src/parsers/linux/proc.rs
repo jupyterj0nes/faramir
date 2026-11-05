@@ -68,7 +68,7 @@ pub fn parse_running_processes_file(file_path: &Path, computer_name: &str) -> Re
                         target_username: "root".to_string(),
                         processname: target.split_whitespace().next().unwrap_or(target).to_string(),
                         commandline: Some(format!("Executing Binary Link: {}", target)),
-                        parentprocessname: "proc".to_string(),
+                        source_file: super::evidence_path(file_path),
                     });
                 }
             }

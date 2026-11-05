@@ -128,7 +128,7 @@ mod tests {
                 target_username: "user".to_string(),
                 processname: "a.exe".to_string(),
                 commandline: None,
-                parentprocessname: "p.exe".to_string(),
+                source_file: "p.exe".to_string(),
             },
             Event {
                 timestamp: "2024-01-02T10:00:00Z".to_string(),
@@ -140,7 +140,7 @@ mod tests {
                 target_username: "user".to_string(),
                 processname: "b.exe".to_string(),
                 commandline: None,
-                parentprocessname: "p.exe".to_string(),
+                source_file: "p.exe".to_string(),
             },
             Event {
                 timestamp: "2024-01-03T10:00:00Z".to_string(),
@@ -152,7 +152,7 @@ mod tests {
                 target_username: "user".to_string(),
                 processname: "c.exe".to_string(),
                 commandline: None,
-                parentprocessname: "p.exe".to_string(),
+                source_file: "p.exe".to_string(),
             },
         ];
 

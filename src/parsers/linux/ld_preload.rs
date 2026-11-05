@@ -62,7 +62,7 @@ pub fn parse_ld_so_preload(file_path: &Path, computer_name: &str) -> Result<Vec<
                 target_username: "root".to_string(),
                 processname: proc_name,
                 commandline: Some(format!("Preloaded Dynamic Library: {}", lib)),
-                parentprocessname: "ld.so".to_string(),
+                source_file: super::evidence_path(file_path),
             });
         }
     }

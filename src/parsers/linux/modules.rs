@@ -55,8 +55,8 @@ pub fn parse_kernel_modules_config(file_path: &Path, computer_name: &str) -> Res
                         subject_username: "root".to_string(),
                         target_username: "root".to_string(),
                         processname: mod_name.to_string(),
-                        commandline: Some(format!("Modprobe Install Hook [{} line {}]: {}", filename, line_idx + 1, cmd)),
-                        parentprocessname: "modprobe".to_string(),
+                        commandline: Some(format!("Modprobe Install Hook [line {}]: {}", line_idx + 1, cmd)),
+                        source_file: super::evidence_path(file_path),
                     });
                 }
             }
@@ -72,8 +72,8 @@ pub fn parse_kernel_modules_config(file_path: &Path, computer_name: &str) -> Res
                 subject_username: "root".to_string(),
                 target_username: "root".to_string(),
                 processname: mod_name.to_string(),
-                commandline: Some(format!("Kernel Auto-load Module: {} (File: {})", mod_name, filename)),
-                parentprocessname: "kernel".to_string(),
+                commandline: Some(format!("Kernel Auto-load Module: {}", mod_name)),
+                source_file: super::evidence_path(file_path),
             });
         }
     }

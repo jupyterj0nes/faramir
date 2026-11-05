@@ -232,7 +232,7 @@ pub struct Row {
     pub image_ext: String,
     pub family: DirFamily,
     pub name_class: NameClass,
-    /// Where the row was found (`parentprocessname`), lowercase.
+    /// Where the row was found (`source_file`), lowercase.
     pub location: String,
     pub user: String,
     pub ts: Option<NaiveDateTime>,
@@ -994,7 +994,7 @@ pub fn normalize(index: usize, e: &Event) -> Row {
         image_ext,
         family,
         name_class,
-        location: e.parentprocessname.to_lowercase(),
+        location: e.source_file.to_lowercase(),
         user: e.target_username.clone(),
         ts: parse_timestamp(&e.timestamp),
         canon,
@@ -1158,7 +1158,7 @@ mod tests {
             target_username: String::new(),
             processname: String::new(),
             commandline: Some(r"\Microsoft\Windows\Workplace Join\Automatic-Device-Join".into()),
-            parentprocessname: String::new(),
+            source_file: String::new(),
         };
         let r = normalize(0, &e);
         assert!(r.image.is_empty() && r.command.is_empty(), "{r:?}");
@@ -1197,7 +1197,7 @@ mod tests {
             target_username: "User".into(),
             processname: String::new(),
             commandline: Some(cmd.into()),
-            parentprocessname: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run".into(),
+            source_file: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run".into(),
         }
     }
 
@@ -1217,7 +1217,7 @@ mod tests {
     #[test]
     fn normalize_linux_row() {
         let mut e = ev("linux:cron:system_job", "System Cron: /bin/bash -c '/dev/shm/.k/run' (File: /etc/cron.d/x)");
-        e.parentprocessname = "crond".into();
+        e.source_file = "crond".into();
         let r = normalize(0, &e);
         assert_eq!(r.os, Os::Linux);
         assert_eq!(r.technique, "cron:system_job");

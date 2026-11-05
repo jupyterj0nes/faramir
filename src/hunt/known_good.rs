@@ -973,7 +973,7 @@ impl KnownGood {
                 return 0;
             };
             let ci_host = col(&["dst_computer", "computer"]);
-            let ci_parent = col(&["log_filename", "parentprocessname"]);
+            let ci_parent = col(&["source_file", "log_filename", "parentprocessname"]);
             let ci_user = col(&["target_user_name", "target_username"]);
             let mut n = 0usize;
             for (i, rec) in rdr.records().enumerate() {
@@ -996,7 +996,7 @@ impl KnownGood {
                     target_username: ci_user.and_then(|c| rec.get(c)).unwrap_or("").to_string(),
                     processname: String::new(),
                     commandline: Some(cmd.to_string()),
-                    parentprocessname: ci_parent.and_then(|c| rec.get(c)).unwrap_or("").to_string(),
+                    source_file: ci_parent.and_then(|c| rec.get(c)).unwrap_or("").to_string(),
                 };
                 let row = super::normalize::normalize(0, &e);
                 into.insert(row.canon);
@@ -1024,7 +1024,7 @@ mod tests {
             target_username: "User".into(),
             processname: String::new(),
             commandline: Some(cmd.into()),
-            parentprocessname: location.into(),
+            source_file: location.into(),
         };
         normalize(0, &e)
     }

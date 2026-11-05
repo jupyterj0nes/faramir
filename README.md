@@ -36,7 +36,7 @@ It is the Rust successor of [Boromir](https://github.com/Alexgpsec/Persistence_B
 - **Deleted persistence**: keys and values recovered from freed hive cells, plus anything that existed in a Volume Shadow Copy but is gone from the live volume. On ext4, the jbd2 journal gives back deleted crontabs, units and keys with their name, dates and content, and the previous content of files that were rewritten.
 - **Carving, when you ask for it.** `--carve` scans the raw bytes of an image, a pagefile or a memory dump for whole registry hives that no file system points to any more, and runs every technique on them. Off by default; every finding it adds is tagged `carved`. The scanner and the hive-bin chain reader are the [blockcarve](https://github.com/jupyterj0nes/blockcarve) crate shared with masstin, allymacb and caarea.
 - **Every row flagged.** Two engines look at each finding: a catalogue of what known-bad persistence looks like (LOLBins fetching URLs, encoded PowerShell, `ld.so.preload`, reverse shells, system names outside their folders, scratch folders…) against what a stock Windows or Linux ships with, and a statistical test, the one masstin's graph-hunt uses, that asks how unusual the entry is compared with the rest of the run: on how many hosts it appears, how common its folder and its name are among its peers, whether it was written in a burst with other techniques. `--baseline <date>` makes everything before the date the reference and puts what came after to the test. Result: `significant`, `candidate`, `habitual`, `baseline` or `not_evaluated`, the same words masstin, caarea and allymacb write, with a 0 to 100 score and the reasons, each one saying whether a rule or the test spoke.
-- **One CSV timeline, masstin's 19 columns.** The header is byte for byte the one [masstin](https://github.com/jupyterj0nes/masstin) writes: 14 event columns (faramir fills the eight that mean the same thing and leaves the logon-only ones empty) and the analysis tail (`hunt`, `hunt_score`, `hunt_why` from the hunt, `verdict`, `notes` from the analyst). Persistence and lateral movement from the same case concatenate, and a case tool reads one convention.
+- **One CSV timeline, 19 columns in [masstin](https://github.com/jupyterj0nes/masstin)'s verticals.** As wide as masstin's timeline, every faramir field in the same column as the masstin field that means the same thing (`timestamp` under `time_created`, `artifact` under `event_type`, `commandline` under `detail`, `source_file` under `log_filename`…), three `reserved_` columns where persistence has nothing to say, and the analysis tail the four tools share (`hunt`, `hunt_score`, `hunt_why` from the hunt, `verdict`, `notes` from the analyst). Persistence and lateral movement from the same case line up column by column, and each tool keeps a header that says what it is.
 - **Nothing silent**: 140+ numbered diagnostic codes with a severity; a corrupt log, a renamed hive or a parser panic is reported and the run goes on.
 
 ## Demo
@@ -84,7 +84,7 @@ faramir [OPTIONS] [ACTION]
 | `--silent` | No console output. |
 | `--carve` | Also scan the raw bytes of every disk image, and of any `-f` file that is not a hive, for registry hives. Reads the whole image, so it is opt-in. Findings are tagged `carved`. |
 | `--baseline <DATE>` | Rows written before the date are what the machine looked like when it was trusted (`baseline`); rows after it are tested against them and are `candidate` when nothing else is said about them. `YYYY-MM-DD`, optionally with `HH:MM[:SS]`. `--investigation-from`, masstin's name for it, is an alias. |
-| `--known-good <CSV>` | A faramir CSV from a clean host (this layout, the ten-column one of 0.3, or just `event_type,detail`): its entries are vouched for on every host, `habitual` whatever their rules say (user names, SIDs, GUIDs, drive letters and version folders are neutralised). The two clean lab hosts of the reference are built in the same way (`src/hunt/clean/`). Repeatable. |
+| `--known-good <CSV>` | A faramir CSV from a clean host (this layout, the ten-column one of 0.3, or just `artifact,commandline`; masstin's `event_type,detail` are read as the same columns): its entries are vouched for on every host, `habitual` whatever their rules say (user names, SIDs, GUIDs, drive letters and version folders are neutralised). The two clean lab hosts of the reference are built in the same way (`src/hunt/clean/`). Repeatable. |
 | `--alpha <ALPHA>` | False-discovery rate of the statistical test, the share of `significant` rows allowed to be false alarms. Default `0.05`. |
 | `--carry-marks <CSV>` | An earlier faramir CSV of the same evidence: its `verdict` and `notes` are copied onto every row with the same 14 event columns (masstin's row hash), so marking is not lost when the evidence is parsed again. Repeatable. |
 | `--no-hunt` | Leave `hunt`, `hunt_score` and `hunt_why` empty. |
@@ -302,26 +302,26 @@ faramir -f /cases/WS01-reimaged.E01 -o ws01-v2.csv --baseline 2026-10-01 --carry
 
 ## Output
 
-One CSV with masstin's 19 columns, in masstin's order and with masstin's names, so `merge`, the loaders and a case tool read it as any other timeline. The 14 event columns:
+One CSV, 19 columns: as wide as masstin's timeline, every faramir field in the same vertical as the masstin field that means the same thing, under faramir's own names, so a persistence timeline and a lateral-movement timeline line up column by column and a case tool maps each header once. The 14 event columns, with the masstin column each one lines up with:
 
-| Column | faramir writes |
-|---|---|
-| `time_created` | `2024-01-17 21:20:00.000` (key last-write time, unit mtime; empty when unknown) |
-| `dst_computer` | `WS01` |
-| `event_type` | The technique: `windows:persistence:registry_run_key`, `windows:persistence:deleted:windows_service`, `windows:persistence:removed_since_vss:registry_run_key`, `windows:persistence:carved:registry_run_key`, `linux:ssh:authorized_key`, `linux:deleted:cron:system_job`, `linux:previous_version:sudoers:nopasswd` |
-| `event_id` | `0` |
-| `logon_type` | empty |
-| `target_user_name` | `System`, `User`, `root`, the account of the crontab or the SSH key |
-| `target_domain_name` | empty |
-| `src_computer` | empty |
-| `src_ip` | empty |
-| `subject_user_name` | the same account |
-| `subject_domain_name` | empty |
-| `logon_id` | empty |
-| `detail` | The entry: `C:\ProgramData\updater.exe --silent`, `Systemd Unit: x.service (Desc: …, Exec: /usr/sbin/x)`, `Sudoers [sudoers line 55]: %Leadership ALL=(ALL) NOPASSWD:ALL` |
-| `log_filename` | Where it was found: the hive path, the key, the unit file, the daemon (`crond`, `systemd`, `udevd`), the snapshot, the carved hive with its write time and image offset |
+| # | Column | masstin | faramir writes |
+|---|---|---|---|
+| 1 | `timestamp` | `time_created` | `2024-01-17 21:20:00.000` (key last-write time, unit mtime; empty when unknown) |
+| 2 | `computer` | `dst_computer` | `WS01` |
+| 3 | `artifact` | `event_type` | The technique: `windows:persistence:registry_run_key`, `windows:persistence:deleted:windows_service`, `windows:persistence:removed_since_vss:registry_run_key`, `windows:persistence:carved:registry_run_key`, `linux:ssh:authorized_key`, `linux:deleted:cron:system_job`, `linux:previous_version:sudoers:nopasswd` |
+| 4 | `event_id` | `event_id` | `0` |
+| 5 | `state` | `logon_type` | How the entry was obtained: `live`, `deleted`, `removed_since_vss`, `carved`, `carved_deleted`, `previous_version` |
+| 6 | `target_username` | `target_user_name` | `System`, `User`, `root`, the account of the crontab or the SSH key |
+| 7 | `reserved_1` | `target_domain_name` | empty |
+| 8 | `processname` | `src_computer` | The image name: `updater.exe`, `run.sh`, `/usr/bin/snap` |
+| 9 | `reserved_2` | `src_ip` | empty |
+| 10 | `subject_username` | `subject_user_name` | the same account |
+| 11 | `reserved_3` | `subject_domain_name` | empty |
+| 12 | `pid` | `logon_id` | The process id when the row is a running process (`linux:process:…`), `0` otherwise |
+| 13 | `commandline` | `detail` | What runs: `C:\ProgramData\updater.exe --silent`, `Systemd Unit: x.service (Desc: …, Exec: /usr/sbin/x)`, `Sudoers [line 55]: %Leadership ALL=(ALL) NOPASSWD:ALL` |
+| 14 | `source_file` | `log_filename` | The file the entry was read from, relative to the evidence, and the key inside it: `/etc/cron.d/e2scrub_all`, `/home/bob/.ssh/authorized_keys`, `/lib/systemd/system/nginx.service`, `C\Windows\System32\config\SOFTWARE:Services\Spooler (Print Spooler)`, `partition_0\Users\bob_NTUSER.DAT:deleted key Software\Microsoft\Windows\CurrentVersion\Run`, `VSS snapshot created 2026-10-29 01:57:43 UTC, gone from live volume: partition_0_vss_0\Users\mallory_NTUSER.DAT`, the carved hive with its write time and image offset |
 
-The logon-only columns stay empty on purpose: they exist so the columns line up with masstin's. Then the analysis tail:
+The three `reserved_` columns exist so the columns line up with masstin's (its domains and source address have no persistence equivalent); they are always empty. The `hunt` engine reads `source_file` as the row's location (a unit outside `/etc/systemd` or `~/.config` is a packaged one). Then the analysis tail, the one shared by masstin, caarea, faramir and allymacb:
 
 | Column | Written by | Values |
 |---|---|---|
@@ -331,16 +331,16 @@ The logon-only columns stay empty on purpose: they exist so the columns line up 
 | `verdict` | the analyst | `suspicious`, `confirmed`, `benign` or empty |
 | `notes` | the analyst | free text, `#tags` welcome |
 
-Quoting is masstin's: an empty event field is `""`, a value with a comma, a quote or a line break is quoted, the rest is bare, and the tail is bare when empty (`,,,,,`).
+Quoting is masstin's: an empty event field is `""`, a value with a comma, a quote or a line break is quoted, the rest is bare, and the tail is bare when empty (`,,,,,`). Rows from a real Ubuntu triage and from the carving lab image:
 
 ```
-time_created,dst_computer,event_type,event_id,logon_type,target_user_name,target_domain_name,src_computer,src_ip,subject_user_name,subject_domain_name,logon_id,detail,log_filename,hunt,hunt_score,hunt_why,verdict,notes
-2026-10-28 12:00:00.000,WS01,windows:persistence:registry_run_key,0,"",User,"","","",User,"","",C:\Users\bob\bob.exe,…\entry_50_0\NTUSER.DAT,candidate,24,rule H3003 (medium): Executes from a user profile folder or a hidden directory [T1564.001]; written after the baseline,,
-2026-10-28 12:00:00.000,WS01,windows:persistence:windows_service,0,"",System,"","","",System,"","",C:\Windows\Temp\evilsvc.exe,HKLM\SYSTEM\CurrentControlSet\Services\EvilSvc,significant,100,rule H1009 (high): Script run from a user-writable folder [T1059]; rule H3001 (high): Persistence from a scratch folder [T1547]; rule H1015 (medium): Runs as SYSTEM from a user-writable folder [T1053.005]; written after the baseline,confirmed,"#ir-4711 dropper, see ticket"
-"",WS01,windows:persistence:deleted:deleted_registry_persistence,0,"",Unknown,"","","",Unknown,"","",C:\Users\Public\d.exe -s,deleted value Dropper (key unknown),significant,100,rule H3001 (high): Persistence from a scratch folder [T1547]; rule H3014 (low): No longer present on the live system [T1070]; deleted,,
-2026-09-30 08:15:42.000,WS01,windows:persistence:carved:registry_run_key,0,"",System,"","","",System,"","",C:\ProgramData\upd.exe,"carved SOFTWARE hive written 2026-09-30 08:15:42.000 at offset 0x1c3f80000 (71303168 bytes, 17408 bin(s), complete): …\carved\carved_0001c3f80000_SOFTWARE.regf",candidate,20,rule H3002 (low): Executes from AppData, ProgramData, a home or a hidden folder [T1547]; rule H3014 (low): No longer present on the live system [T1070]; carved,,
-2026-10-28 12:00:00.000,WS01,windows:persistence:registry_run_key,0,"",User,"","","",User,"","",C:\Windows\system32\SecurityHealthSystray.exe,…\NTUSER.DAT,habitual,0,stock Windows entry,,
-2026-03-02 09:10:00.000,WS01,windows:persistence:windows_service,0,"",System,"","","",System,"","","""C:\Program Files\Common Files\Adobe\ARM\1.0\armsvc.exe""",…\SYSTEM,baseline,0,before the baseline,,
+timestamp,computer,artifact,event_id,state,target_username,reserved_1,processname,reserved_2,subject_username,reserved_3,pid,commandline,source_file,hunt,hunt_score,hunt_why,verdict,notes
+2026-10-28 16:04:46.000,leo-lnx01,linux:sudoers:nopasswd,0,live,root,"",sudo,"",%Leadership,"",0,Sudoers [line 55]: %Leadership   ALL=(ALL) NOPASSWD:ALL,/etc/sudoers,candidate,29,rule H2009 (medium): sudo without password for a user [T1548.003]; written after the baseline,,
+2022-01-08 20:02:36.000,leo-lnx01,linux:cron:system_job,0,live,root,"",test,"",root,"",0,System Cron: test -e /run/systemd/system || SERVICE_MODE=1 /usr/lib/x86_64-linux-gnu/e2fsprogs/e2scrub_all_cron,/etc/cron.d/e2scrub_all,habitual,0,stock Linux entry; on the clean reference hosts,,
+2026-10-28 14:40:23.000,leo-lnx01,linux:ssh:authorized_key,0,live,c00pr,"",sshd,"",c00pr,"",0,SSH Key (ssh-rsa) Comment: DESKTOP-VJ4PTJJ\c00pr@DESKTOP-VJ4PTJJ,/home/c00pr/.ssh/authorized_keys,candidate,0,written after the baseline,,
+2026-11-05 09:07:31.000,carvelab,windows:persistence:group_policy_script,0,live,System,"",gpo_startup.ps1,"",System,"",0,C:\carvetest\gpo_startup.ps1 -lab,partition_0\Windows\System32\GroupPolicy\Machine\Scripts\scripts.ini [Startup],significant,33,rule H1009 (high): Script run from a user-writable folder [T1059],,
+2026-10-28 21:06:50.258,carvelab,windows:persistence:deleted:registry_run_key,0,deleted,User,"",Run,"",User,"",0,Run,partition_0\Users\bob_NTUSER.DAT:deleted key Software\Microsoft\Windows\CurrentVersion\Run,candidate,20,rule H3014 (low): No longer present on the live system [T1070]; deleted,,
+2026-10-29 01:57:39.387,carvelab,windows:persistence:removed_since_vss:registry_run_key,0,removed_since_vss,User,"",faramir_canary_20261029015739.exe,"",User,"",0,C:\carvetest\faramir_canary_20261029015739.exe,"VSS snapshot created 2026-10-29 01:57:43 UTC, gone from live volume: partition_0_vss_0\Users\mallory_NTUSER.DAT",candidate,41,rule H3013 (low): Random-looking or tiny file name [T1036]; rule H3014 (low): No longer present on the live system [T1070]; removed since VSS,,
 ```
 
 ## Diagnostics

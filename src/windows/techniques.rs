@@ -891,7 +891,7 @@ where
 /// One finding. `value` is what runs (the command, image, DLL or data the
 /// slot holds): it becomes the event's `commandline`, the `detail` column,
 /// and what the hunt reads. `path` is where it was found (the registry key
-/// or file): the `parentprocessname` / `log_filename` column.
+/// or file): the `source_file` / `log_filename` column.
 pub(crate) fn persist(ts: String, technique: &str, path: String, value: String, access: &str) -> Persistence {
     Persistence {
         timestamp: ts,

@@ -1,14 +1,31 @@
-//! The timeline CSV: masstin's 19 columns, so a persistence timeline, a
-//! lateral-movement timeline and a process timeline read with one schema.
+//! The timeline CSV: 19 columns, as wide as masstin's timeline and with
+//! every faramir field in the same vertical as the masstin field that means
+//! the same thing, under faramir's own names. A persistence timeline, a
+//! lateral-movement timeline and a process timeline then line up column by
+//! column, and a case tool maps each tool's header once.
 //!
-//! The 14 event columns are masstin's, in masstin's order. faramir fills
-//! the ones that mean the same thing (`time_created`, `dst_computer`,
-//! `event_type`, `event_id`, `target_user_name`, `subject_user_name`,
-//! `detail`, `log_filename`) and leaves the logon-only ones empty
-//! (`logon_type`, the two domains, `src_computer`, `src_ip`, `logon_id`).
-//! Then the analysis tail: `hunt`, `hunt_score`, `hunt_why` written by the
-//! hunt; `verdict`, `notes` written by the analyst and carried across runs
-//! with `--carry-marks`.
+//! The 14 event columns (masstin's name in the third column):
+//!
+//! | # | faramir | masstin | content |
+//! |---|---|---|---|
+//! | 1 | `timestamp` | time_created | key last-write time, unit mtime; empty when unknown |
+//! | 2 | `computer` | dst_computer | host name |
+//! | 3 | `artifact` | event_type | the technique |
+//! | 4 | `event_id` | event_id | `0` |
+//! | 5 | `state` | logon_type | `live`, `deleted`, `removed_since_vss`, `carved`, `carved_deleted`, `previous_version` |
+//! | 6 | `target_username` | target_user_name | the account the entry runs as |
+//! | 7 | `reserved_1` | target_domain_name | empty |
+//! | 8 | `processname` | src_computer | image name |
+//! | 9 | `reserved_2` | src_ip | empty |
+//! | 10 | `subject_username` | subject_user_name | the same account |
+//! | 11 | `reserved_3` | subject_domain_name | empty |
+//! | 12 | `pid` | logon_id | process id when known (running processes), `0` otherwise |
+//! | 13 | `commandline` | detail | what runs |
+//! | 14 | `source_file` | log_filename | the file the entry was read from, and the key inside it |
+//!
+//! Then the analysis tail shared by masstin, caarea, faramir and allymacb:
+//! `hunt`, `hunt_score`, `hunt_why` written by the hunt; `verdict`, `notes`
+//! written by the analyst and carried across runs with `--carry-marks`.
 //!
 //! Quoting follows masstin's writer: an empty event field is `""`, a value
 //! with a comma, a quote or a line break is quoted with inner quotes
@@ -20,22 +37,22 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-/// The 14 event columns, in order: masstin's.
+/// The 14 event columns, in order: faramir's names in masstin's verticals.
 pub const BASE_COLUMNS: [&str; 14] = [
-    "time_created",
-    "dst_computer",
-    "event_type",
+    "timestamp",
+    "computer",
+    "artifact",
     "event_id",
-    "logon_type",
-    "target_user_name",
-    "target_domain_name",
-    "src_computer",
-    "src_ip",
-    "subject_user_name",
-    "subject_domain_name",
-    "logon_id",
-    "detail",
-    "log_filename",
+    "state",
+    "target_username",
+    "reserved_1",
+    "processname",
+    "reserved_2",
+    "subject_username",
+    "reserved_3",
+    "pid",
+    "commandline",
+    "source_file",
 ];
 
 /// The analysis tail: three columns the hunt fills, two the analyst fills.
@@ -44,11 +61,31 @@ pub const TAIL_COLUMNS: [&str; 5] = ["hunt", "hunt_score", "hunt_why", "verdict"
 /// Number of columns every row has.
 pub const COLUMNS: usize = 19;
 
-/// The header, byte for byte masstin's.
-pub const HEADER: &str = "time_created,dst_computer,event_type,event_id,logon_type,target_user_name,target_domain_name,src_computer,src_ip,subject_user_name,subject_domain_name,logon_id,detail,log_filename,hunt,hunt_score,hunt_why,verdict,notes";
+/// The header, as written (bare).
+pub const HEADER: &str = "timestamp,computer,artifact,event_id,state,target_username,reserved_1,processname,reserved_2,subject_username,reserved_3,pid,commandline,source_file,hunt,hunt_score,hunt_why,verdict,notes";
 
 /// Empty tail, as written after a row nothing was said about.
 pub const EMPTY_TAIL: &str = ",,,,,";
+
+/// The `state` column: how the entry was obtained, read off the artifact
+/// name. `live` is what the system shows now; the rest are no longer on the
+/// live system.
+pub fn state_of(artifact: &str) -> &'static str {
+    let rest = artifact.strip_prefix("windows:persistence:").or_else(|| artifact.strip_prefix("linux:")).unwrap_or(artifact);
+    if rest.starts_with("carved:deleted:") {
+        "carved_deleted"
+    } else if rest.starts_with("carved:") {
+        "carved"
+    } else if rest.starts_with("removed_since_vss:") {
+        "removed_since_vss"
+    } else if rest.starts_with("deleted:") {
+        "deleted"
+    } else if rest.starts_with("previous_version:") {
+        "previous_version"
+    } else {
+        "live"
+    }
+}
 
 /// The 14 event columns of an event, as the CSV writes them (unescaped).
 /// This is the row's identity for `--carry-marks`.
@@ -58,16 +95,16 @@ pub fn base_fields(e: &Event) -> [String; 14] {
         e.computer.clone(),
         e.artifact.clone(),
         e.event_id.to_string(),
-        String::new(),
+        state_of(&e.artifact).to_string(),
         e.target_username.clone(),
         String::new(),
-        String::new(),
+        e.processname.clone(),
         String::new(),
         e.subject_username.clone(),
         String::new(),
-        String::new(),
+        e.pid.to_string(),
         e.commandline.clone().unwrap_or_else(|| "N/A".to_string()),
-        e.parentprocessname.clone(),
+        e.source_file.clone(),
     ]
 }
 
@@ -156,18 +193,49 @@ mod tests {
             target_username: "User".to_string(),
             processname: "malware.exe".to_string(),
             commandline: Some("C:\\Users\\Admin\\malware.exe -d".to_string()),
-            parentprocessname: "RunKey".to_string(),
+            source_file: "C:\\Windows\\System32\\config\\SOFTWARE:Microsoft\\Windows\\CurrentVersion\\Run".to_string(),
         }
     }
 
+    /// masstin's 14 event columns, the verticals faramir's line up with.
+    const MASSTIN_COLUMNS: [&str; 14] = [
+        "time_created",
+        "dst_computer",
+        "event_type",
+        "event_id",
+        "logon_type",
+        "target_user_name",
+        "target_domain_name",
+        "src_computer",
+        "src_ip",
+        "subject_user_name",
+        "subject_domain_name",
+        "logon_id",
+        "detail",
+        "log_filename",
+    ];
+
     #[test]
-    fn header_is_masstins_nineteen_columns() {
+    fn header_is_as_wide_as_masstins_with_faramirs_names() {
         let cols: Vec<&str> = HEADER.split(',').collect();
         assert_eq!(cols.len(), COLUMNS);
+        assert_eq!(cols.len(), MASSTIN_COLUMNS.len() + TAIL_COLUMNS.len());
         assert_eq!(&cols[..14], &BASE_COLUMNS);
         assert_eq!(&cols[14..], &TAIL_COLUMNS);
         assert_eq!(EMPTY_TAIL.matches(',').count(), TAIL_COLUMNS.len());
-        assert_eq!(HEADER, "time_created,dst_computer,event_type,event_id,logon_type,target_user_name,target_domain_name,src_computer,src_ip,subject_user_name,subject_domain_name,logon_id,detail,log_filename,hunt,hunt_score,hunt_why,verdict,notes");
+        assert_eq!(HEADER, "timestamp,computer,artifact,event_id,state,target_username,reserved_1,processname,reserved_2,subject_username,reserved_3,pid,commandline,source_file,hunt,hunt_score,hunt_why,verdict,notes");
+        // the same verticals as masstin, never masstin's names (except the one both tools spell alike)
+        for (f, m) in BASE_COLUMNS.iter().zip(MASSTIN_COLUMNS) {
+            assert!(f == &m || !MASSTIN_COLUMNS.contains(f), "{f} is a masstin name in another vertical");
+        }
+        assert_eq!(BASE_COLUMNS[3], MASSTIN_COLUMNS[3], "event_id is the one name both share");
+        // the tail is the one shared by the four tools
+        assert_eq!(TAIL_COLUMNS, ["hunt", "hunt_score", "hunt_why", "verdict", "notes"]);
+        // no column is named twice
+        let mut names: Vec<&str> = cols.clone();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), COLUMNS);
     }
 
     #[test]
@@ -189,18 +257,42 @@ mod tests {
     }
 
     #[test]
-    fn base_fields_land_in_masstins_slots() {
-        let b = base_fields(&event());
-        assert_eq!(b[0], "2026-10-13 10:00:00.000");
-        assert_eq!(b[1], "WIN-SRV01");
-        assert_eq!(b[2], "windows:persistence:registry_run_key");
-        assert_eq!(b[3], "0");
-        assert_eq!(b[5], "User", "target_user_name");
-        assert_eq!(b[9], "User", "subject_user_name");
-        assert_eq!(b[12], "C:\\Users\\Admin\\malware.exe -d", "detail");
-        assert_eq!(b[13], "RunKey", "log_filename");
-        for k in [4, 6, 7, 8, 10, 11] {
-            assert_eq!(b[k], "", "{} is a logon-only column", BASE_COLUMNS[k]);
+    fn state_is_read_off_the_artifact() {
+        assert_eq!(state_of("windows:persistence:registry_run_key"), "live");
+        assert_eq!(state_of("windows:persistence:deleted:registry_run_key"), "deleted");
+        assert_eq!(state_of("windows:persistence:removed_since_vss:windows_service"), "removed_since_vss");
+        assert_eq!(state_of("windows:persistence:carved:registry_run_key"), "carved");
+        assert_eq!(state_of("windows:persistence:carved:deleted:registry_run_key"), "carved_deleted");
+        assert_eq!(state_of("linux:cron:system_job"), "live");
+        assert_eq!(state_of("linux:deleted:cron:system_job"), "deleted");
+        assert_eq!(state_of("linux:previous_version:sudoers:nopasswd"), "previous_version");
+        assert_eq!(state_of("linux:deleted:file"), "deleted");
+    }
+
+    #[test]
+    fn base_fields_fill_faramirs_slots_and_leave_the_reserved_ones_empty() {
+        let mut e = event();
+        e.pid = 4242;
+        let b = base_fields(&e);
+        assert_eq!(b[0], "2026-10-13 10:00:00.000", "timestamp");
+        assert_eq!(b[1], "WIN-SRV01", "computer");
+        assert_eq!(b[2], "windows:persistence:registry_run_key", "artifact");
+        assert_eq!(b[3], "0", "event_id");
+        assert_eq!(b[4], "live", "state");
+        assert_eq!(b[5], "User", "target_username");
+        assert_eq!(b[7], "malware.exe", "processname");
+        assert_eq!(b[9], "User", "subject_username");
+        assert_eq!(b[11], "4242", "pid");
+        assert_eq!(b[12], "C:\\Users\\Admin\\malware.exe -d", "commandline");
+        assert_eq!(b[13], "C:\\Windows\\System32\\config\\SOFTWARE:Microsoft\\Windows\\CurrentVersion\\Run", "source_file");
+        for k in [6, 8, 10] {
+            assert_eq!(b[k], "", "{} is reserved", BASE_COLUMNS[k]);
+            assert!(BASE_COLUMNS[k].starts_with("reserved_"));
+        }
+        // every field of the event reaches the CSV: nothing is dropped
+        let joined = b.join("\x1f");
+        for v in [e.timestamp.as_str(), e.computer.as_str(), e.artifact.as_str(), e.target_username.as_str(), e.processname.as_str(), e.subject_username.as_str(), "4242", e.commandline.as_deref().unwrap(), e.source_file.as_str()] {
+            assert!(joined.contains(v), "{v} missing from the event columns");
         }
     }
 
@@ -222,11 +314,14 @@ mod tests {
         assert_eq!(lines[0], HEADER);
         assert_eq!(
             lines[1],
-            "2026-10-13 10:00:00.000,WIN-SRV01,windows:persistence:registry_run_key,0,\"\",User,\"\",\"\",\"\",User,\"\",\"\",C:\\Users\\Admin\\malware.exe -d,RunKey,significant,85,rule H1001 (high): x; deleted,,"
+            "2026-10-13 10:00:00.000,WIN-SRV01,windows:persistence:registry_run_key,0,live,User,\"\",malware.exe,\"\",User,\"\",0,C:\\Users\\Admin\\malware.exe -d,C:\\Windows\\System32\\config\\SOFTWARE:Microsoft\\Windows\\CurrentVersion\\Run,significant,85,rule H1001 (high): x; deleted,,"
         );
         let mut rdr = csv::ReaderBuilder::new().has_headers(true).from_reader(content.as_bytes());
         let rec = rdr.records().next().unwrap().unwrap();
         assert_eq!(rec.len(), COLUMNS);
+        assert_eq!(rec.get(4), Some("live"));
+        assert_eq!(rec.get(7), Some("malware.exe"));
+        assert_eq!(rec.get(11), Some("0"));
         assert_eq!(rec.get(14), Some("significant"));
         assert_eq!(rec.get(15), Some("85"));
         assert_eq!(rec.get(16), Some("rule H1001 (high): x; deleted"));
@@ -239,20 +334,20 @@ mod tests {
         let events = vec![Event {
             timestamp: String::new(),
             computer: "H".to_string(),
-            artifact: "linux:cron:system_job".to_string(),
+            artifact: "linux:deleted:cron:system_job".to_string(),
             event_id: 0,
             pid: 0,
             subject_username: "root".to_string(),
             target_username: "root".to_string(),
             processname: "x".to_string(),
             commandline: None,
-            parentprocessname: "crond".to_string(),
+            source_file: "/etc/cron.d/x".to_string(),
         }];
         export_timeline(&events, &[], &Marks::default(), &test_csv, true).expect("export");
         let content = std::fs::read_to_string(&test_csv).unwrap();
         let _ = std::fs::remove_file(&test_csv);
         let line = content.lines().nth(1).unwrap();
-        assert_eq!(line, "\"\",H,linux:cron:system_job,0,\"\",root,\"\",\"\",\"\",root,\"\",\"\",N/A,crond,,,,,");
+        assert_eq!(line, "\"\",H,linux:deleted:cron:system_job,0,deleted,root,\"\",x,\"\",root,\"\",0,N/A,/etc/cron.d/x,,,,,");
         let mut rdr = csv::ReaderBuilder::new().has_headers(true).from_reader(content.as_bytes());
         let rec = rdr.records().next().unwrap().unwrap();
         assert_eq!(rec.len(), COLUMNS);
@@ -282,7 +377,7 @@ mod tests {
         let _ = std::fs::remove_file(&first);
         let _ = std::fs::remove_file(&second);
         let lines: Vec<&str> = content.lines().collect();
-        assert!(lines[1].ends_with(",RunKey,significant,90,rule H1001 (high): x,confirmed,\"#ir-4711, see ticket\""), "{}", lines[1]);
-        assert!(lines[2].ends_with(",RunKey,,,,,"), "{}", lines[2]);
+        assert!(lines[1].ends_with("\\Run,significant,90,rule H1001 (high): x,confirmed,\"#ir-4711, see ticket\""), "{}", lines[1]);
+        assert!(lines[2].ends_with("\\Run,,,,,"), "{}", lines[2]);
     }
 }

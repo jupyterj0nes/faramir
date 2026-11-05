@@ -75,8 +75,8 @@ pub fn parse_cron_system_file(file_path: &Path, computer_name: &str) -> Result<V
             subject_username: user.clone(),
             target_username: user,
             processname: proc_name,
-            commandline: Some(format!("System Cron: {} (File: {})", command, filename)),
-            parentprocessname: "crond".to_string(),
+            commandline: Some(format!("System Cron: {}", command)),
+            source_file: super::evidence_path(file_path),
         });
     }
 
@@ -140,7 +140,7 @@ pub fn parse_cron_spool_file(file_path: &Path, computer_name: &str) -> Result<Ve
                 target_username: user.clone(),
                 processname: proc_name,
                 commandline: Some(format!("User Cron {}: {}", tokens[0], command)),
-                parentprocessname: "crond".to_string(),
+                source_file: super::evidence_path(file_path),
             });
         } else {
             // min hour dom mon dow command
@@ -164,7 +164,7 @@ pub fn parse_cron_spool_file(file_path: &Path, computer_name: &str) -> Result<Ve
                 target_username: user.clone(),
                 processname: proc_name,
                 commandline: Some(format!("User Cron: {}", command)),
-                parentprocessname: "crond".to_string(),
+                source_file: super::evidence_path(file_path),
             });
         }
     }
@@ -230,7 +230,7 @@ pub fn parse_anacrontab_file(file_path: &Path, computer_name: &str) -> Result<Ve
             target_username: "root".to_string(),
             processname: proc_name,
             commandline: Some(format!("Anacron [{}] (Period: {}d, Delay: {}m): {}", job_id, period, delay, command)),
-            parentprocessname: "anacron".to_string(),
+            source_file: super::evidence_path(file_path),
         });
     }
 
@@ -266,6 +266,6 @@ pub fn parse_cron_periodic_script(file_path: &Path, computer_name: &str) -> Resu
         target_username: "root".to_string(),
         processname: filename.to_string(),
         commandline: Some(format!("Periodic Cron Script: {}", super::evidence_path(file_path))),
-        parentprocessname: "run-parts".to_string(),
+        source_file: super::evidence_path(file_path),
     }])
 }

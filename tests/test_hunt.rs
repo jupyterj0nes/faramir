@@ -20,7 +20,7 @@ fn ev(host: &str, artifact: &str, cmd: &str, ts: &str) -> Event {
         target_username: "User".into(),
         processname: String::new(),
         commandline: Some(cmd.into()),
-        parentprocessname: "where".into(),
+        source_file: "where".into(),
     }
 }
 
@@ -112,7 +112,7 @@ fn cli_rejects_bad_baseline_and_alpha() {
 }
 
 #[test]
-fn cli_writes_masstins_nineteen_columns_and_flags_the_cron_backdoor() {
+fn cli_writes_nineteen_columns_in_masstins_verticals_and_flags_the_cron_backdoor() {
     let d = TempDir::new("hunt_cli_ok");
     let root = linux_tree(&d);
     let out = d.join("out.csv");
@@ -121,7 +121,7 @@ fn cli_writes_masstins_nineteen_columns_and_flags_the_cron_backdoor() {
     assert!(stdout.contains("Hunt:"), "{stdout}");
     let h = header(&out);
     assert_eq!(h.len(), 19);
-    assert_eq!(h.join(","), "time_created,dst_computer,event_type,event_id,logon_type,target_user_name,target_domain_name,src_computer,src_ip,subject_user_name,subject_domain_name,logon_id,detail,log_filename,hunt,hunt_score,hunt_why,verdict,notes", "masstin's header, byte for byte");
+    assert_eq!(h.join(","), "timestamp,computer,artifact,event_id,state,target_username,reserved_1,processname,reserved_2,subject_username,reserved_3,pid,commandline,source_file,hunt,hunt_score,hunt_why,verdict,notes", "faramir's names, masstin's 19 verticals");
     assert_eq!(std::fs::read_to_string(&out).unwrap().lines().next().unwrap(), h.join(","), "header written bare");
     let rows = csv_rows(&out);
     assert!(!rows.is_empty());
@@ -143,9 +143,12 @@ fn cli_writes_masstins_nineteen_columns_and_flags_the_cron_backdoor() {
         assert_eq!(r.len(), 19, "{r:?}");
         assert_eq!(r.get(1), Some("web01"), "dst_computer: {r:?}");
         assert!(r.get(2).unwrap().starts_with("linux:"), "event_type: {r:?}");
-        for k in [4, 6, 7, 8, 10, 11] {
-            assert_eq!(r.get(k), Some(""), "logon-only column {k} stays empty: {r:?}");
+        for k in [6, 8, 10] {
+            assert_eq!(r.get(k), Some(""), "reserved column {k} stays empty: {r:?}");
         }
+        assert_eq!(r.get(4), Some("live"), "state: {r:?}");
+        assert_eq!(r.get(11), Some("0"), "pid: {r:?}");
+        assert!(r.get(13).unwrap().starts_with('/'), "source_file is the path of the file in the evidence: {r:?}");
         assert!(!r.get(12).unwrap().is_empty(), "detail: {r:?}");
         assert!(!r.get(13).unwrap().is_empty(), "log_filename: {r:?}");
         assert!(Hunt::parse(r.get(14).unwrap()).is_some(), "{r:?}");

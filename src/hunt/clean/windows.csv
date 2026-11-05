@@ -1,0 +1,862 @@
+event_type,detail
+windows:persistence:active_setup_stubpath,"""%ProgramFiles%\Windows Mail\WinMail.exe"" OCInstallUserConfigOE"
+windows:persistence:active_setup_stubpath,"""C:\Windows\System32\rundll32.exe"" ""C:\Windows\System32\iesetup.dll"",IEHardenAdmin"
+windows:persistence:active_setup_stubpath,"""C:\Windows\System32\rundll32.exe"" ""C:\Windows\System32\iesetup.dll"",IEHardenUser"
+windows:persistence:active_setup_stubpath,%SystemRoot%\system32\unregmp2.exe /FirstLogon
+windows:persistence:active_setup_stubpath,%SystemRoot%\system32\unregmp2.exe /ShowWMP
+windows:persistence:active_setup_stubpath,/UserInstall
+windows:persistence:active_setup_stubpath,"C:\Windows\SysWOW64\Rundll32.exe C:\Windows\SysWOW64\mscories.dll,Install"
+windows:persistence:active_setup_stubpath,"C:\Windows\System32\Rundll32.exe C:\Windows\System32\mscories.dll,Install"
+windows:persistence:active_setup_stubpath,C:\Windows\System32\ie4uinit.exe -UserConfig
+windows:persistence:active_setup_stubpath,U
+windows:persistence:app_paths,"""%ProgramFiles%\Windows NT\Accessories\WORDPAD.EXE"""
+windows:persistence:app_paths,%CommonProgramFiles%\Microsoft Shared\Ink\mip.exe
+windows:persistence:app_paths,%CommonProgramFiles%\microsoft shared\ink\TabTip.exe
+windows:persistence:app_paths,%ProgramFiles%\Windows Mail\wab.exe
+windows:persistence:app_paths,%ProgramFiles%\Windows Mail\wabmig.exe
+windows:persistence:app_paths,%ProgramFiles(x86)%\Windows Media Player\wmplayer.exe
+windows:persistence:app_paths,%SystemRoot%\System32\licensemanagershellext.exe
+windows:persistence:app_paths,%SystemRoot%\System32\mspaint.exe
+windows:persistence:app_paths,%SystemRoot%\system32\SnippingTool.exe
+windows:persistence:app_paths,%SystemRoot%\system32\WindowsPowerShell\v1.0\PowerShell.exe
+windows:persistence:app_paths,%windir%\system32\inetsrv\InetMgr.exe
+windows:persistence:app_paths,C:\Program Files\Internet Explorer\IEDIAGCMD.EXE
+windows:persistence:app_paths,C:\Program Files\Internet Explorer\IEXPLORE.EXE
+windows:persistence:app_paths,C:\Program Files\PowerShell\7\pwsh.exe
+windows:persistence:boot_execute,autocheck autochk /q /v *
+windows:persistence:com_treatas_redirect,{802B1FB9-056B-4720-B0CC-80D23B71171E} -> %CommonProgramFiles%\microsoft shared\ink\tiptsf.dll
+windows:persistence:com_treatas_redirect,{D3E34B21-9D75-101A-8C3D-00AA001A1652} -> %systemroot%\system32\mspaint.exe
+windows:persistence:com_treatas_redirect,{F20DA720-C02F-11CE-927B-0800095AE340} -> %SystemRoot%\system32\packager.dll
+windows:persistence:credential_provider,{2135f72a-90b5-4ed3-a7f1-8bb705ac276a} PicturePasswordLogonProvider -> %SystemRoot%\system32\credprovslegacy.dll
+windows:persistence:credential_provider,{25CBB996-92ED-457e-B28C-4774084BD562} GenericProvider -> %SystemRoot%\system32\credprovs.dll
+windows:persistence:credential_provider,{3dd6bec0-8193-4ffe-ae25-e08e39ea4063} NPProvider -> %SystemRoot%\system32\credprovs.dll
+windows:persistence:credential_provider,{48B4E58D-2791-456C-9091-D524C6C706F2} Secondary Authentication Factor Credential Provider -> C:\Windows\System32\devicengccredprov.dll
+windows:persistence:credential_provider,{60b78e88-ead8-445c-9cfd-0b87f74ea6cd} PasswordProvider -> %SystemRoot%\system32\credprovs.dll
+windows:persistence:credential_provider,{DDC0EED2-ADBE-40b6-A217-EDE16A79A0DE} GenericFilter -> %SystemRoot%\system32\credprovs.dll
+windows:persistence:credential_provider,{cb82ea12-9f71-446d-89e1-8d0924e1256e} PINLogonProvider -> %SystemRoot%\system32\credprovslegacy.dll
+windows:persistence:deleted:group_policy_script,Shutdown
+windows:persistence:deleted:scheduled_task,Periodic cleanup task.
+windows:persistence:deleted:scheduled_task,Periodic maintenance task.
+windows:persistence:deleted:scheduled_task,Periodic verification task.
+windows:persistence:deleted:scheduled_task,\Microsoft\Windows\Windows Defender\Windows Defender Cache Maintenance
+windows:persistence:deleted:scheduled_task,\Microsoft\Windows\Windows Defender\Windows Defender Cleanup
+windows:persistence:deleted:scheduled_task,\Microsoft\Windows\Windows Defender\Windows Defender Verification
+windows:persistence:file_association_hijack,%SystemRoot%\Explorer.exe
+windows:persistence:group_policy_extension_dll,%SystemRoot%\System32\TsUsbRedirectionGroupPolicyExtension.dll
+windows:persistence:group_policy_extension_dll,%SystemRoot%\System32\cscobj.dll
+windows:persistence:group_policy_extension_dll,%SystemRoot%\System32\dskquota.dll
+windows:persistence:group_policy_extension_dll,%SystemRoot%\System32\polstore.dll
+windows:persistence:group_policy_extension_dll,%SystemRoot%\System32\srchadmin.dll
+windows:persistence:group_policy_extension_dll,%systemroot%\system32\gpprnext.dll
+windows:persistence:group_policy_extension_dll,AppManagementConfiguration.dll
+windows:persistence:group_policy_extension_dll,C:\Program Files\LAPS\CSE\AdmPwd.dll
+windows:persistence:group_policy_extension_dll,C:\Windows\System32\gpprefcl.dll
+windows:persistence:group_policy_extension_dll,C:\Windows\System32\gpscript.dll
+windows:persistence:group_policy_extension_dll,C:\Windows\System32\iedkcs32.dll
+windows:persistence:group_policy_extension_dll,C:\Windows\System32\tsworkspace.dll
+windows:persistence:group_policy_extension_dll,appmgmts.dll
+windows:persistence:group_policy_extension_dll,auditcse.dll
+windows:persistence:group_policy_extension_dll,dggpext.dll
+windows:persistence:group_policy_extension_dll,dot3gpclnt.dll
+windows:persistence:group_policy_extension_dll,fdeploy.dll
+windows:persistence:group_policy_extension_dll,gptext.dll
+windows:persistence:group_policy_extension_dll,pwlauncher.dll
+windows:persistence:group_policy_extension_dll,scecli.dll
+windows:persistence:group_policy_extension_dll,wlgpclnt.dll
+windows:persistence:group_policy_script,C:\Program Files\Google\Compute Engine\metadata_scripts\run_shutdown_scripts.cmd
+windows:persistence:hijacking_of_hhctrl_ocx,C:\Windows\SysWOW64\hhctrl.ocx
+windows:persistence:hijacking_of_hhctrl_ocx,C:\Windows\System32\hhctrl.ocx
+windows:persistence:lsa_security_packages,""""""
+windows:persistence:netsh_helper_dll,C:\Windows\system32\netkvmco.dll
+windows:persistence:netsh_helper_dll,authfwcfg.dll
+windows:persistence:netsh_helper_dll,dhcpcmonitor.dll
+windows:persistence:netsh_helper_dll,dot3cfg.dll
+windows:persistence:netsh_helper_dll,fwcfg.dll
+windows:persistence:netsh_helper_dll,hnetmon.dll
+windows:persistence:netsh_helper_dll,ifmon.dll
+windows:persistence:netsh_helper_dll,netiohlp.dll
+windows:persistence:netsh_helper_dll,nettrace.dll
+windows:persistence:netsh_helper_dll,nshhttp.dll
+windows:persistence:netsh_helper_dll,nshipsec.dll
+windows:persistence:netsh_helper_dll,nshwfp.dll
+windows:persistence:netsh_helper_dll,peerdistsh.dll
+windows:persistence:netsh_helper_dll,rasmontr.dll
+windows:persistence:netsh_helper_dll,rpcnsh.dll
+windows:persistence:netsh_helper_dll,whhelper.dll
+windows:persistence:netsh_helper_dll,wshelper.dll
+windows:persistence:office_add-in,%systemroot%\system32\mssphtb.dll
+windows:persistence:scheduled_task,"""C:\Program Files\Google\Compute Engine\metadata_scripts\run_startup_scripts.cmd"""
+windows:persistence:scheduled_task,%SystemRoot%\System32\MbaeParserTask.exe
+windows:persistence:scheduled_task,%SystemRoot%\System32\drvinst.exe 6
+windows:persistence:scheduled_task,%SystemRoot%\System32\dsregcmd.exe
+windows:persistence:scheduled_task,%SystemRoot%\System32\wsqmcons.exe
+windows:persistence:scheduled_task,%SystemRoot%\system32\ClipUp.exe -p -s -o
+windows:persistence:scheduled_task,%WINDIR%\system32\SecureBootEncodeUEFI.exe
+windows:persistence:scheduled_task,%systemroot%\System32\sihclient.exe
+windows:persistence:scheduled_task,%systemroot%\System32\sihclient.exe /boot
+windows:persistence:scheduled_task,%systemroot%\system32\MusNotification.exe
+windows:persistence:scheduled_task,%systemroot%\system32\MusNotification.exe Display
+windows:persistence:scheduled_task,%systemroot%\system32\MusNotification.exe ReadyToReboot
+windows:persistence:scheduled_task,%systemroot%\system32\cmd.exe /d /c %systemroot%\system32\silcollector.cmd configure
+windows:persistence:scheduled_task,%systemroot%\system32\cmd.exe /d /c %systemroot%\system32\silcollector.cmd publish
+windows:persistence:scheduled_task,%systemroot%\system32\cscript.exe /B /nologo %systemroot%\system32\calluxxprovider.vbs $(Arg0) $(Arg1) $(Arg2)
+windows:persistence:scheduled_task,"%systemroot%\system32\rundll32.exe %systemroot%\system32\pla.dll,PlaHost ""Server Manager Performance Monitor"" ""$(Arg0)"""
+windows:persistence:scheduled_task,%systemroot%\system32\usoclient.exe RefreshSettings
+windows:persistence:scheduled_task,%systemroot%\system32\usoclient.exe ResumeUpdate
+windows:persistence:scheduled_task,%systemroot%\system32\usoclient.exe StartInstall
+windows:persistence:scheduled_task,%systemroot%\system32\usoclient.exe StartScan
+windows:persistence:scheduled_task,%windir%\System32\LocationNotificationWindows.exe
+windows:persistence:scheduled_task,%windir%\System32\WindowsActionDialog.exe
+windows:persistence:scheduled_task,%windir%\System32\XblGameSaveTask.exe logon
+windows:persistence:scheduled_task,%windir%\System32\XblGameSaveTask.exe standby
+windows:persistence:scheduled_task,%windir%\system32\AppHostRegistrationVerifier.exe
+windows:persistence:scheduled_task,%windir%\system32\DFDWiz.exe
+windows:persistence:scheduled_task,%windir%\system32\MDMAgent.exe
+windows:persistence:scheduled_task,%windir%\system32\ServerManagerLauncher.exe
+windows:persistence:scheduled_task,%windir%\system32\SpaceAgent.exe
+windows:persistence:scheduled_task,%windir%\system32\appidcertstorecheck.exe
+windows:persistence:scheduled_task,%windir%\system32\appidpolicyconverter.exe
+windows:persistence:scheduled_task,%windir%\system32\cleanmgr.exe /autoclean /d %systemdrive%
+windows:persistence:scheduled_task,%windir%\system32\compattelrunner.exe
+windows:persistence:scheduled_task,%windir%\system32\compattelrunner.exe -maintenance
+windows:persistence:scheduled_task,%windir%\system32\defrag.exe -c -h -g -# -m 8 -i 13500
+windows:persistence:scheduled_task,%windir%\system32\defrag.exe -c -h -k -g -$
+windows:persistence:scheduled_task,%windir%\system32\devicecensus.exe
+windows:persistence:scheduled_task,%windir%\system32\disksnapshot.exe -z
+windows:persistence:scheduled_task,%windir%\system32\dstokenclean.exe
+windows:persistence:scheduled_task,%windir%\system32\gatherNetworkInfo.vbs
+windows:persistence:scheduled_task,%windir%\system32\lpremove.exe
+windows:persistence:scheduled_task,"%windir%\system32\rundll32.exe %windir%\system32\AppxDeploymentClient.dll,AppxPreStageCleanupRunTask"
+windows:persistence:scheduled_task,"%windir%\system32\rundll32.exe /d acproxy.dll,PerformAutochkOperations"
+windows:persistence:scheduled_task,"%windir%\system32\rundll32.exe Startupscan.dll,SusRunTask"
+windows:persistence:scheduled_task,"%windir%\system32\rundll32.exe Windows.Storage.ApplicationData.dll,CleanupTemporaryState"
+windows:persistence:scheduled_task,"%windir%\system32\rundll32.exe bfe.dll,BfeOnServiceStartTypeChange"
+windows:persistence:scheduled_task,"%windir%\system32\rundll32.exe dfdts.dll,DfdGetDefaultPolicyAndSMART"
+windows:persistence:scheduled_task,%windir%\system32\spaceman.exe /Work
+windows:persistence:scheduled_task,%windir%\system32\speech_onecore\common\SpeechModelDownload.exe
+windows:persistence:scheduled_task,%windir%\system32\tzsync.exe
+windows:persistence:scheduled_task,%windir%\system32\wermgr.exe -upload
+windows:persistence:scheduled_task,BthUdTask.exe $(Arg0)
+windows:persistence:scheduled_task,C:\Windows\system32\sc.exe start wuauserv
+windows:persistence:scheduled_task,\Microsoft\Windows\.NET Framework\.NET Framework NGEN v4.0.30319
+windows:persistence:scheduled_task,\Microsoft\Windows\.NET Framework\.NET Framework NGEN v4.0.30319 64
+windows:persistence:scheduled_task,\Microsoft\Windows\.NET Framework\.NET Framework NGEN v4.0.30319 64 Critical
+windows:persistence:scheduled_task,\Microsoft\Windows\.NET Framework\.NET Framework NGEN v4.0.30319 Critical
+windows:persistence:scheduled_task,\Microsoft\Windows\Active Directory Rights Management Services Client\AD RMS Rights Policy Template Management (Automated)
+windows:persistence:scheduled_task,\Microsoft\Windows\Active Directory Rights Management Services Client\AD RMS Rights Policy Template Management (Manual)
+windows:persistence:scheduled_task,\Microsoft\Windows\AppID\EDP Policy Manager
+windows:persistence:scheduled_task,\Microsoft\Windows\AppID\SmartScreenSpecific
+windows:persistence:scheduled_task,\Microsoft\Windows\CertificateServicesClient\AikCertEnrollTask
+windows:persistence:scheduled_task,\Microsoft\Windows\CertificateServicesClient\CryptoPolicyTask
+windows:persistence:scheduled_task,\Microsoft\Windows\CertificateServicesClient\KeyPreGenTask
+windows:persistence:scheduled_task,\Microsoft\Windows\CertificateServicesClient\SystemTask
+windows:persistence:scheduled_task,\Microsoft\Windows\CertificateServicesClient\UserTask
+windows:persistence:scheduled_task,\Microsoft\Windows\CertificateServicesClient\UserTask-Roam
+windows:persistence:scheduled_task,\Microsoft\Windows\Chkdsk\ProactiveScan
+windows:persistence:scheduled_task,\Microsoft\Windows\CloudExperienceHost\CreateObjectTask
+windows:persistence:scheduled_task,\Microsoft\Windows\Customer Experience Improvement Program\KernelCeipTask
+windows:persistence:scheduled_task,\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip
+windows:persistence:scheduled_task,\Microsoft\Windows\Data Integrity Scan\Data Integrity Scan
+windows:persistence:scheduled_task,\Microsoft\Windows\Data Integrity Scan\Data Integrity Scan for Crash Recovery
+windows:persistence:scheduled_task,\Microsoft\Windows\Device Setup\Metadata Refresh
+windows:persistence:scheduled_task,\Microsoft\Windows\Diagnosis\Scheduled
+windows:persistence:scheduled_task,\Microsoft\Windows\DiskFootprint\StorageSense
+windows:persistence:scheduled_task,\Microsoft\Windows\EDP\EDP App Launch Task
+windows:persistence:scheduled_task,\Microsoft\Windows\EDP\EDP Auth Task
+windows:persistence:scheduled_task,\Microsoft\Windows\ErrorDetails\EnableErrorDetailsUpdate
+windows:persistence:scheduled_task,\Microsoft\Windows\ErrorDetails\ErrorDetailsUpdate
+windows:persistence:scheduled_task,\Microsoft\Windows\LanguageComponentsInstaller\Installation
+windows:persistence:scheduled_task,\Microsoft\Windows\LanguageComponentsInstaller\Uninstallation
+windows:persistence:scheduled_task,\Microsoft\Windows\License Manager\TempSignedLicenseExchange
+windows:persistence:scheduled_task,\Microsoft\Windows\Maintenance\WinSAT
+windows:persistence:scheduled_task,\Microsoft\Windows\Maps\MapsToastTask
+windows:persistence:scheduled_task,\Microsoft\Windows\Maps\MapsUpdateTask
+windows:persistence:scheduled_task,\Microsoft\Windows\MemoryDiagnostic\ProcessMemoryDiagnosticEvents
+windows:persistence:scheduled_task,\Microsoft\Windows\MemoryDiagnostic\RunFullMemoryDiagnostic
+windows:persistence:scheduled_task,\Microsoft\Windows\Multimedia\SystemSoundsService
+windows:persistence:scheduled_task,\Microsoft\Windows\Network Controller\SDN Diagnostics Task
+windows:persistence:scheduled_task,\Microsoft\Windows\Offline Files\Background Synchronization
+windows:persistence:scheduled_task,\Microsoft\Windows\Offline Files\Logon Synchronization
+windows:persistence:scheduled_task,\Microsoft\Windows\PI\Secure-Boot-Update
+windows:persistence:scheduled_task,\Microsoft\Windows\PI\Sqm-Tasks
+windows:persistence:scheduled_task,\Microsoft\Windows\Plug and Play\Device Install Group Policy
+windows:persistence:scheduled_task,\Microsoft\Windows\Plug and Play\Device Install Reboot Required
+windows:persistence:scheduled_task,\Microsoft\Windows\Plug and Play\Plug and Play Cleanup
+windows:persistence:scheduled_task,\Microsoft\Windows\Power Efficiency Diagnostics\AnalyzeSystem
+windows:persistence:scheduled_task,\Microsoft\Windows\Ras\MobilityManager
+windows:persistence:scheduled_task,\Microsoft\Windows\RecoveryEnvironment\VerifyWinRE
+windows:persistence:scheduled_task,\Microsoft\Windows\Registry\RegIdleBackup
+windows:persistence:scheduled_task,\Microsoft\Windows\Servicing\StartComponentCleanup
+windows:persistence:scheduled_task,\Microsoft\Windows\SettingSync\BackgroundUploadTask
+windows:persistence:scheduled_task,\Microsoft\Windows\SettingSync\BackupTask
+windows:persistence:scheduled_task,\Microsoft\Windows\SettingSync\NetworkStateChangeTask
+windows:persistence:scheduled_task,\Microsoft\Windows\Setup\SetupCleanupTask
+windows:persistence:scheduled_task,\Microsoft\Windows\Shell\CreateObjectTask
+windows:persistence:scheduled_task,\Microsoft\Windows\Shell\IndexerAutomaticMaintenance
+windows:persistence:scheduled_task,\Microsoft\Windows\SoftwareProtectionPlatform\SvcRestartTask
+windows:persistence:scheduled_task,\Microsoft\Windows\SoftwareProtectionPlatform\SvcRestartTaskLogon
+windows:persistence:scheduled_task,\Microsoft\Windows\SoftwareProtectionPlatform\SvcRestartTaskNetwork
+windows:persistence:scheduled_task,\Microsoft\Windows\Storage Tiers Management\Storage Tiers Management Initialization
+windows:persistence:scheduled_task,\Microsoft\Windows\TPM\Tpm-HASCertRetr
+windows:persistence:scheduled_task,\Microsoft\Windows\TPM\Tpm-Maintenance
+windows:persistence:scheduled_task,\Microsoft\Windows\Task Manager\Interactive
+windows:persistence:scheduled_task,\Microsoft\Windows\TextServicesFramework\MsCtfMonitor
+windows:persistence:scheduled_task,\Microsoft\Windows\Time Synchronization\ForceSynchronizeTime
+windows:persistence:scheduled_task,\Microsoft\Windows\User Profile Service\HiveUploadTask
+windows:persistence:scheduled_task,\Microsoft\Windows\WDI\ResolutionHost
+windows:persistence:scheduled_task,\Microsoft\Windows\WindowsColorSystem\Calibration Loader
+windows:persistence:scheduled_task,\Microsoft\Windows\WindowsUpdate\Automatic App Update
+windows:persistence:scheduled_task,\Microsoft\Windows\Wininet\CacheTask
+windows:persistence:scheduled_task,sc.exe config upnphost start= auto
+windows:persistence:scheduled_task__xml_,"""C:\Program Files\Google\Compute Engine\metadata_scripts\run_startup_scripts.cmd"""
+windows:persistence:scheduled_task__xml_,%SystemRoot%\System32\MbaeParserTask.exe
+windows:persistence:scheduled_task__xml_,%SystemRoot%\System32\drvinst.exe 6
+windows:persistence:scheduled_task__xml_,%SystemRoot%\System32\dsregcmd.exe
+windows:persistence:scheduled_task__xml_,%SystemRoot%\System32\wsqmcons.exe
+windows:persistence:scheduled_task__xml_,%SystemRoot%\system32\ClipUp.exe -p -s -o
+windows:persistence:scheduled_task__xml_,%WINDIR%\system32\SecureBootEncodeUEFI.exe
+windows:persistence:scheduled_task__xml_,%systemroot%\System32\sihclient.exe
+windows:persistence:scheduled_task__xml_,%systemroot%\System32\sihclient.exe /boot
+windows:persistence:scheduled_task__xml_,%systemroot%\system32\MusNotification.exe
+windows:persistence:scheduled_task__xml_,%systemroot%\system32\MusNotification.exe Display
+windows:persistence:scheduled_task__xml_,%systemroot%\system32\MusNotification.exe ReadyToReboot
+windows:persistence:scheduled_task__xml_,%systemroot%\system32\cmd.exe /d /c %systemroot%\system32\silcollector.cmd configure
+windows:persistence:scheduled_task__xml_,%systemroot%\system32\cmd.exe /d /c %systemroot%\system32\silcollector.cmd publish
+windows:persistence:scheduled_task__xml_,%systemroot%\system32\cscript.exe /B /nologo %systemroot%\system32\calluxxprovider.vbs $(Arg0) $(Arg1) $(Arg2)
+windows:persistence:scheduled_task__xml_,"%systemroot%\system32\rundll32.exe %systemroot%\system32\pla.dll,PlaHost ""Server Manager Performance Monitor"" ""$(Arg0)"""
+windows:persistence:scheduled_task__xml_,%systemroot%\system32\usoclient.exe RefreshSettings
+windows:persistence:scheduled_task__xml_,%systemroot%\system32\usoclient.exe ResumeUpdate
+windows:persistence:scheduled_task__xml_,%systemroot%\system32\usoclient.exe StartInstall
+windows:persistence:scheduled_task__xml_,%systemroot%\system32\usoclient.exe StartScan
+windows:persistence:scheduled_task__xml_,%windir%\System32\LocationNotificationWindows.exe
+windows:persistence:scheduled_task__xml_,%windir%\System32\WindowsActionDialog.exe
+windows:persistence:scheduled_task__xml_,%windir%\System32\XblGameSaveTask.exe logon
+windows:persistence:scheduled_task__xml_,%windir%\System32\XblGameSaveTask.exe standby
+windows:persistence:scheduled_task__xml_,%windir%\system32\AppHostRegistrationVerifier.exe
+windows:persistence:scheduled_task__xml_,%windir%\system32\DFDWiz.exe
+windows:persistence:scheduled_task__xml_,%windir%\system32\MDMAgent.exe
+windows:persistence:scheduled_task__xml_,%windir%\system32\ServerManagerLauncher.exe
+windows:persistence:scheduled_task__xml_,%windir%\system32\SpaceAgent.exe
+windows:persistence:scheduled_task__xml_,%windir%\system32\appidcertstorecheck.exe
+windows:persistence:scheduled_task__xml_,%windir%\system32\appidpolicyconverter.exe
+windows:persistence:scheduled_task__xml_,%windir%\system32\cleanmgr.exe /autoclean /d %systemdrive%
+windows:persistence:scheduled_task__xml_,%windir%\system32\compattelrunner.exe
+windows:persistence:scheduled_task__xml_,%windir%\system32\compattelrunner.exe -maintenance
+windows:persistence:scheduled_task__xml_,%windir%\system32\defrag.exe -c -h -g -# -m 8 -i 13500
+windows:persistence:scheduled_task__xml_,%windir%\system32\defrag.exe -c -h -k -g -$
+windows:persistence:scheduled_task__xml_,%windir%\system32\devicecensus.exe
+windows:persistence:scheduled_task__xml_,%windir%\system32\disksnapshot.exe -z
+windows:persistence:scheduled_task__xml_,%windir%\system32\dstokenclean.exe
+windows:persistence:scheduled_task__xml_,%windir%\system32\gatherNetworkInfo.vbs
+windows:persistence:scheduled_task__xml_,%windir%\system32\lpremove.exe
+windows:persistence:scheduled_task__xml_,"%windir%\system32\rundll32.exe %windir%\system32\AppxDeploymentClient.dll,AppxPreStageCleanupRunTask"
+windows:persistence:scheduled_task__xml_,"%windir%\system32\rundll32.exe /d acproxy.dll,PerformAutochkOperations"
+windows:persistence:scheduled_task__xml_,"%windir%\system32\rundll32.exe Startupscan.dll,SusRunTask"
+windows:persistence:scheduled_task__xml_,"%windir%\system32\rundll32.exe Windows.Storage.ApplicationData.dll,CleanupTemporaryState"
+windows:persistence:scheduled_task__xml_,"%windir%\system32\rundll32.exe bfe.dll,BfeOnServiceStartTypeChange"
+windows:persistence:scheduled_task__xml_,"%windir%\system32\rundll32.exe dfdts.dll,DfdGetDefaultPolicyAndSMART"
+windows:persistence:scheduled_task__xml_,%windir%\system32\spaceman.exe /Work
+windows:persistence:scheduled_task__xml_,%windir%\system32\speech_onecore\common\SpeechModelDownload.exe
+windows:persistence:scheduled_task__xml_,%windir%\system32\tzsync.exe
+windows:persistence:scheduled_task__xml_,%windir%\system32\wermgr.exe -upload
+windows:persistence:scheduled_task__xml_,BthUdTask.exe $(Arg0)
+windows:persistence:scheduled_task__xml_,C:\Windows\system32\sc.exe start wuauserv
+windows:persistence:scheduled_task__xml_,sc.exe config upnphost start= auto
+windows:persistence:service_failure_command,customScript.cmd
+windows:persistence:service_failure_command,not used
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\AJRouter.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\APHostService.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\AudioEndpointBuilder.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\Audiosrv.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\AxInstSV.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\CDPSvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\CDPUserSvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\ClipSVC.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\DeviceSetupManager.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\DsSvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\NetSetupSvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\NgcCtnrSvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\PhoneService.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\PimIndexMaintenance.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\RMapi.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\RpcEpMap.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\SCardSvr.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\ScDeviceEnum.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\SystemEventsBrokerServer.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\TabSvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\TimeBrokerServer.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\WUDFSvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\WerSvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\WpnUserService.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\XblAuthManager.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\XblGameSave.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\appidsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\appinfo.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\appmgmts.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\bfe.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\bisrv.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\browser.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\certprop.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\cscsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\dnsrslvr.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\dot3svc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\eapsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\embeddedmodesvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\gpsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\hvhostsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\icsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\icsvcext.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\ikeext.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\iphlpsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\ipnathlp.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\ipsecsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\lfsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\lltdsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\lmhsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\lsm.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\moshost.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\mprdim.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\ncasvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\ncbservice.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\netman.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\netprofmsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\nlasvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\pcasvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\qmgr.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\rasauto.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\rasmans.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\sens.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\shsvcs.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\ssdpsrv.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\tapisrv.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\termsrv.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\tetheringservice.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\trkwks.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\ualsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\umrdp.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\unistore.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\upnphost.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\userdataservice.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\usermgr.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\wbiosrvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\wcmsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\wcncsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\wercplsupport.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\wevtsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\wiarpc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\wiaservc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\System32\wkssvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\AppReadiness.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\DevQueryBroker.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\EnterpriseAppMgmtSvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\FntCache.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\FrameServer.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\KdsSvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\LicenseManagerSvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\SensorService.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\WalletService.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\WpnService.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\WsmSvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\appxdeploymentserver.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\bthserv.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\coremessaging.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\cryptsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\das.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\dcpsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\dhcpcore.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\diagtrack.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\dmwappushsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\dps.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\dsrolesrv.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\efssvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\fdPHost.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\fdrespub.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\hidserv.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\kdcsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\keyiso.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\mpssvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\netlogon.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\ngcsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\regsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\rpcss.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\sacsvr.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\sensrsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\sessenv.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\srvsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\sstpsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\storsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\svsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\themeservice.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\tileobjserver.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\tzautoupdate.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\umpnpmgr.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\umpo.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\wbem\WMIsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\wdi.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\wecsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\windows.staterepository.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\winhttp.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\wlidsvc.dll
+windows:persistence:servicedll_hijacking,%SystemRoot%\system32\wpdbusenum.dll
+windows:persistence:servicedll_hijacking,%Systemroot%\System32\defragsvc.dll
+windows:persistence:servicedll_hijacking,%Systemroot%\System32\smphost.dll
+windows:persistence:servicedll_hijacking,%Systemroot%\System32\swprv.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\Windows.Internal.Management.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\es.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\flightsettings.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\iscsiexe.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\kpssvc.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\msdtckrm.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\nsisvc.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\ntdsa.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\pla.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\profsvc.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\schedsvc.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\sysmain.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\usocore.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\wephostsvc.dll
+windows:persistence:servicedll_hijacking,%systemroot%\system32\wuaueng.dll
+windows:persistence:servicedll_hijacking,%windir%\system32\inetsrv\apphostsvc.dll
+windows:persistence:servicedll_hijacking,%windir%\system32\inetsrv\iisw3adm.dll
+windows:persistence:servicedll_hijacking,%windir%\system32\inetsrv\w3logsvc.dll
+windows:persistence:servicedll_hijacking,%windir%\system32\qwave.dll
+windows:persistence:servicedll_hijacking,%windir%\system32\seclogon.dll
+windows:persistence:servicedll_hijacking,C:\Windows\SYSTEM32\w32time.DLL
+windows:persistence:servicedll_hijacking,C:\Windows\System32\vaultsvc.dll
+windows:persistence:servicedll_hijacking,C:\Windows\system32\spool\drivers\x64\3\PrintConfig.dll
+windows:persistence:shell_extension___bho,BriefcaseMenu = {85BBD920-42A0-1069-A2E4-08002B30309D} -> %SystemRoot%\system32\syncui.dll
+windows:persistence:shell_extension___bho,BriefcasePage = {85BBD920-42A0-1069-A2E4-08002B30309D} -> %SystemRoot%\system32\syncui.dll
+windows:persistence:shell_extension___bho,Compatibility = {1d27f844-3a1f-4410-85ac-14651078412d} -> %SystemRoot%\system32\acppage.dll
+windows:persistence:shell_extension___bho,CopyAsPathMenu = {f3d06e7c-1e45-4a26-847e-f9fcdee59be0} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,CryptoSignMenu = {7444C719-39BF-11D1-8CD9-00C04FC29D45} -> %SystemRoot%\system32\cryptext.dll
+windows:persistence:shell_extension___bho,EncryptionMenu = {A470F8CF-A1E8-4f65-8335-227475AA5C46} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,EnhancedStorageShell = {2854F705-3548-414C-A113-93E27C808C85} -> C:\Windows\System32\EhStorShell.dll
+windows:persistence:shell_extension___bho,EnhancedStorageShell = {D9144DCD-E998-4ECA-AB6A-DCD83CCBA16D} -> C:\Windows\System32\EhStorShell.dll
+windows:persistence:shell_extension___bho,FileSystem = {217FC9C0-3AEA-1069-A2DB-08002B30309D} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,Library Location = {3dad6c5d-2167-4cae-9914-f99e41c12cfa} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,New = {D969A300-E7FF-11d0-A93B-00A0C90F2719} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,Offline Files = {474C98EE-CF3D-41f5-80E3-4AAB0AB04301} -> %SystemRoot%\System32\cscui.dll
+windows:persistence:shell_extension___bho,Offline Files = {4E77131D-3629-431c-9818-C5679DC83E81} -> %SystemRoot%\System32\cscui.dll
+windows:persistence:shell_extension___bho,Open With = {09799AFB-AD67-11d1-ABCD-00C04FC30936} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,Open With EncryptionMenu = {A470F8CF-A1E8-4f65-8335-227475AA5C46} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,OpenContainingFolderMenu = {37ea3a21-7493-4208-a011-7f9ea79ce9f5} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,PintoStartScreen = {470C0EBD-5D73-4d58-9CED-E91E22E23282} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,SendTo = {7BA4C740-9E81-11CF-99D3-00AA004AE837} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,Sharing = {40dd6e20-7c17-11ce-a804-00aa003ca9f6} -> %SystemRoot%\system32\ntshrui.dll
+windows:persistence:shell_extension___bho,Sharing = {f81e9010-6ea4-11ce-a7ff-00aa003ca9f6} -> %SystemRoot%\system32\ntshrui.dll
+windows:persistence:shell_extension___bho,{00021401-0000-0000-C000-000000000046} -> C:\Windows\System32\windows.storage.dll
+windows:persistence:shell_extension___bho,{1f2e5c40-9550-11ce-99d2-00aa006e086c} -> %SystemRoot%\system32\rshx32.dll
+windows:persistence:shell_extension___bho,{3EA48300-8CF6-101B-84FB-666CCB9BCD32} -> %SystemRoot%\system32\docprop.dll
+windows:persistence:shell_extension___bho,{4648F940-EFE3-4BAB-9211-3BE45CD5029D} -> %systemroot%\system32\vssui.dll
+windows:persistence:shell_extension___bho,{474C98EE-CF3D-41f5-80E3-4AAB0AB04301} -> %SystemRoot%\System32\cscui.dll
+windows:persistence:shell_extension___bho,{596AB062-B4D2-4215-9F74-E9109B0A8153} -> %SystemRoot%\system32\twext.dll
+windows:persistence:shell_extension___bho,{77597368-7b15-11d0-a0c2-080036af3f03} -> %systemroot%\system32\printui.dll
+windows:persistence:shell_extension___bho,{883373C3-BF89-11D1-BE35-080036B11A03} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,{90AA3A4E-1CBA-4233-B8BB-535773D48449} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,{BD472F60-27FA-11cf-B8B4-444553540000} -> %SystemRoot%\system32\zipfldr.dll
+windows:persistence:shell_extension___bho,{D6791A63-E7E2-4fee-BF52-5DED8E86E9B8} -> %SystemRoot%\system32\wpdshext.dll
+windows:persistence:shell_extension___bho,{a2a9545d-a0c2-42b4-9708-a0b2badd77c8} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shell_extension___bho,{fbeb8a05-beee-4442-804e-409d6c4515e9} -> %SystemRoot%\system32\shell32.dll
+windows:persistence:shellserviceobjectdelayload,{E6FB5E20-DE35-11CF-9C87-00AA005127ED}
+windows:persistence:windows_service,"""%ProgramData%\Microsoft\Windows Defender\Platform\4.18.26100.4-0\NisSrv.exe"""
+windows:persistence:windows_service,"""C:\Program Files (x86)\Microsoft SQL Server\90\Shared\sqlbrowser.exe"""
+windows:persistence:windows_service,"""C:\Program Files\Google\Compute Engine\agent\GCEWindowsAgent.exe"""
+windows:persistence:windows_service,"""C:\Program Files\Google\Compute Engine\agent\GCEWindowsAgentManager.exe"""
+windows:persistence:windows_service,"""C:\Program Files\Google\Compute Engine\agent\GCEWindowsCompatManager.exe"""
+windows:persistence:windows_service,"""C:\Program Files\Google\Compute Engine\vss\GoogleVssAgent.exe"""
+windows:persistence:windows_service,"""C:\Program Files\Google\OSConfig\google_osconfig_agent.exe"""
+windows:persistence:windows_service,"""C:\Program Files\Microsoft SQL Server\90\Shared\sqlwriter.exe"""
+windows:persistence:windows_service,"""C:\Program Files\Microsoft SQL Server\MSSQL15.SQLEXPRESS\MSSQL\Binn\SQLAGENT.EXE"" -i SQLEXPRESS"
+windows:persistence:windows_service,"""C:\Program Files\Microsoft SQL Server\MSSQL15.SQLEXPRESS\MSSQL\Binn\sqlceip.exe"" -Service SQLEXPRESS"
+windows:persistence:windows_service,"""C:\Program Files\Microsoft SQL Server\MSSQL15.SQLEXPRESS\MSSQL\Binn\sqlservr.exe"" -sSQLEXPRESS"
+windows:persistence:windows_service,"""C:\Program Files\OpenSSH\ssh-agent.exe"""
+windows:persistence:windows_service,"""C:\Program Files\OpenSSH\sshd.exe"""
+windows:persistence:windows_service,"""C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26100.4-0\MpDefenderCoreService.exe"""
+windows:persistence:windows_service,"""C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26100.4-0\MsMpEng.exe"""
+windows:persistence:windows_service,%SystemRoot%\SysWow64\perfhost.exe
+windows:persistence:windows_service,%SystemRoot%\System32\SensorDataService.exe
+windows:persistence:windows_service,%SystemRoot%\System32\alg.exe
+windows:persistence:windows_service,%SystemRoot%\System32\ismserv.exe
+windows:persistence:windows_service,%SystemRoot%\System32\lsass.exe
+windows:persistence:windows_service,%SystemRoot%\System32\msdtc.exe
+windows:persistence:windows_service,%SystemRoot%\System32\snmptrap.exe
+windows:persistence:windows_service,%SystemRoot%\System32\spoolsv.exe
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k AppReadiness
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k Camera
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k LocalService
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k LocalServiceNetworkRestricted
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k LocalServiceNoNetwork
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k LocalSystemNetworkRestricted
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k NetSvcs
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k NetworkService
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k NetworkServiceAndNoImpersonation
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k SessionEnvSvc
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k UnistackSvcGroup
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k WerSvcGroup
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k appmodel
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k netsvcs
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k smbsvcs
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k smphost
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k swprv
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k termsvcs
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k utcsvc
+windows:persistence:windows_service,%SystemRoot%\System32\svchost.exe -k wsappx
+windows:persistence:windows_service,%SystemRoot%\System32\vds.exe
+windows:persistence:windows_service,%SystemRoot%\servicing\TrustedInstaller.exe
+windows:persistence:windows_service,%SystemRoot%\system32\DFSRs.exe
+windows:persistence:windows_service,%SystemRoot%\system32\DiagSvcs\DiagnosticsHub.StandardCollector.Service.exe
+windows:persistence:windows_service,%SystemRoot%\system32\RSoPProv.exe
+windows:persistence:windows_service,%SystemRoot%\system32\TieringEngineService.exe
+windows:persistence:windows_service,%SystemRoot%\system32\UI0Detect.exe
+windows:persistence:windows_service,%SystemRoot%\system32\dfssvc.exe
+windows:persistence:windows_service,%SystemRoot%\system32\dllhost.exe /Processid:{02D4B3F1-FD88-11D1-960D-00805FC79235}
+windows:persistence:windows_service,%SystemRoot%\system32\locator.exe
+windows:persistence:windows_service,%SystemRoot%\system32\lsass.exe
+windows:persistence:windows_service,%SystemRoot%\system32\ntfrs.exe
+windows:persistence:windows_service,%SystemRoot%\system32\sppsvc.exe
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k AxInstSVGroup
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k DcomLaunch
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k LocalService
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k LocalServiceAndNoImpersonation
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k LocalServiceNetworkRestricted
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k LocalServiceNoNetwork
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k LocalSystemNetworkRestricted
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k NetworkService
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k NetworkServiceNetworkRestricted
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k RPCSS
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k UnistackSvcGroup
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k WbioSvcGroup
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k appmodel
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k defragsvc
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k imgsvc
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k localService
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k netsvcs
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k print
+windows:persistence:windows_service,%SystemRoot%\system32\svchost.exe -k rpcss
+windows:persistence:windows_service,%systemroot%\ADWS\Microsoft.ActiveDirectory.WebServices.exe
+windows:persistence:windows_service,%systemroot%\Microsoft.NET\Framework64\v4.0.30319\SMSvcHost.exe
+windows:persistence:windows_service,%systemroot%\Microsoft.NET\Framework64\v4.0.30319\aspnet_state.exe
+windows:persistence:windows_service,%systemroot%\system32\AgentService.exe
+windows:persistence:windows_service,%systemroot%\system32\AppVClient.exe
+windows:persistence:windows_service,%systemroot%\system32\SearchIndexer.exe /Embedding
+windows:persistence:windows_service,%systemroot%\system32\certsrv.exe
+windows:persistence:windows_service,%systemroot%\system32\dns.exe
+windows:persistence:windows_service,%systemroot%\system32\lsass.exe
+windows:persistence:windows_service,%systemroot%\system32\msiexec.exe /V
+windows:persistence:windows_service,%systemroot%\system32\ocspsvc.exe
+windows:persistence:windows_service,%systemroot%\system32\svchost.exe -k ICService
+windows:persistence:windows_service,%systemroot%\system32\svchost.exe -k KpsSvcGroup
+windows:persistence:windows_service,%systemroot%\system32\svchost.exe -k LocalService
+windows:persistence:windows_service,%systemroot%\system32\svchost.exe -k LocalServiceNetworkRestricted
+windows:persistence:windows_service,%systemroot%\system32\svchost.exe -k LocalServiceNoNetwork
+windows:persistence:windows_service,%systemroot%\system32\svchost.exe -k LocalSystemNetworkRestricted
+windows:persistence:windows_service,%systemroot%\system32\svchost.exe -k WepHostSvcGroup
+windows:persistence:windows_service,%systemroot%\system32\svchost.exe -k appmodel
+windows:persistence:windows_service,%systemroot%\system32\svchost.exe -k netsvcs
+windows:persistence:windows_service,%systemroot%\system32\svchost.exe -k wsappx
+windows:persistence:windows_service,%systemroot%\system32\vssvc.exe
+windows:persistence:windows_service,%systemroot%\system32\wbem\WmiApSrv.exe
+windows:persistence:windows_service,%windir%\system32\inetsrv\inetinfo.exe
+windows:persistence:windows_service,%windir%\system32\svchost.exe -k GPSvcGroup
+windows:persistence:windows_service,%windir%\system32\svchost.exe -k LocalServiceAndNoImpersonation
+windows:persistence:windows_service,%windir%\system32\svchost.exe -k apphost
+windows:persistence:windows_service,%windir%\system32\svchost.exe -k iissvcs
+windows:persistence:windows_service,%windir%\system32\svchost.exe -k netsvcs
+windows:persistence:windows_service,C:\Windows\system32\dllhost.exe /Processid:{4BD0F329-CFAC-4B8A-910B-8F207275291C}
+windows:persistence:windows_service,System32\DRIVERS\NDProxy.sys
+windows:persistence:windows_service,System32\DRIVERS\cnghwassist.sys
+windows:persistence:windows_service,System32\DRIVERS\ndistapi.sys
+windows:persistence:windows_service,System32\DRIVERS\ndiswan.sys
+windows:persistence:windows_service,System32\DRIVERS\netbt.sys
+windows:persistence:windows_service,System32\DRIVERS\rasacd.sys
+windows:persistence:windows_service,System32\DRIVERS\scfilter.sys
+windows:persistence:windows_service,System32\DRIVERS\smbdirect.sys
+windows:persistence:windows_service,System32\DRIVERS\srv.sys
+windows:persistence:windows_service,System32\DRIVERS\srv2.sys
+windows:persistence:windows_service,System32\DRIVERS\srvnet.sys
+windows:persistence:windows_service,System32\DRIVERS\wanarp.sys
+windows:persistence:windows_service,System32\Drivers\UcmCx.sys
+windows:persistence:windows_service,System32\Drivers\UcmTcpciCx.sys
+windows:persistence:windows_service,System32\Drivers\acpiex.sys
+windows:persistence:windows_service,System32\Drivers\cng.sys
+windows:persistence:windows_service,System32\Drivers\dfsc.sys
+windows:persistence:windows_service,System32\Drivers\ksecdd.sys
+windows:persistence:windows_service,System32\Drivers\ksecpkg.sys
+windows:persistence:windows_service,System32\Drivers\msgpioclx.sys
+windows:persistence:windows_service,System32\Drivers\mup.sys
+windows:persistence:windows_service,System32\drivers\3ware.sys
+windows:persistence:windows_service,System32\drivers\ACPI.sys
+windows:persistence:windows_service,System32\drivers\ADP80XX.SYS
+windows:persistence:windows_service,System32\drivers\CLFS.sys
+windows:persistence:windows_service,System32\drivers\EhStorClass.sys
+windows:persistence:windows_service,System32\drivers\EhStorTcgDrv.sys
+windows:persistence:windows_service,System32\drivers\FsDepends.sys
+windows:persistence:windows_service,System32\drivers\HpSAMD.sys
+windows:persistence:windows_service,System32\drivers\MegaSas2i.sys
+windows:persistence:windows_service,System32\drivers\MsLbfoProvider.sys
+windows:persistence:windows_service,System32\drivers\NdisImPlatform.sys
+windows:persistence:windows_service,System32\drivers\SiSRaid2.sys
+windows:persistence:windows_service,System32\drivers\WindowsTrustedRTProxy.sys
+windows:persistence:windows_service,System32\drivers\WpdUpFltr.sys
+windows:persistence:windows_service,System32\drivers\amdsata.sys
+windows:persistence:windows_service,System32\drivers\amdsbs.sys
+windows:persistence:windows_service,System32\drivers\amdxata.sys
+windows:persistence:windows_service,System32\drivers\arcsas.sys
+windows:persistence:windows_service,System32\drivers\atapi.sys
+windows:persistence:windows_service,System32\drivers\bfadfcoei.sys
+windows:persistence:windows_service,System32\drivers\bfadi.sys
+windows:persistence:windows_service,System32\drivers\bridge.sys
+windows:persistence:windows_service,System32\drivers\bxfcoe.sys
+windows:persistence:windows_service,System32\drivers\bxois.sys
+windows:persistence:windows_service,System32\drivers\bxvbda.sys
+windows:persistence:windows_service,System32\drivers\cht4sx64.sys
+windows:persistence:windows_service,System32\drivers\condrv.sys
+windows:persistence:windows_service,System32\drivers\disk.sys
+windows:persistence:windows_service,System32\drivers\elxfcoe.sys
+windows:persistence:windows_service,System32\drivers\elxstor.sys
+windows:persistence:windows_service,System32\drivers\evbda.sys
+windows:persistence:windows_service,System32\drivers\gpuenergydrv.sys
+windows:persistence:windows_service,System32\drivers\hwpolicy.sys
+windows:persistence:windows_service,System32\drivers\iaStorAV.sys
+windows:persistence:windows_service,System32\drivers\iaStorV.sys
+windows:persistence:windows_service,System32\drivers\intelide.sys
+windows:persistence:windows_service,System32\drivers\intelpep.sys
+windows:persistence:windows_service,System32\drivers\ipnat.sys
+windows:persistence:windows_service,System32\drivers\isapnp.sys
+windows:persistence:windows_service,System32\drivers\lsi_sas.sys
+windows:persistence:windows_service,System32\drivers\lsi_sas2i.sys
+windows:persistence:windows_service,System32\drivers\lsi_sas3i.sys
+windows:persistence:windows_service,System32\drivers\lsi_sss.sys
+windows:persistence:windows_service,System32\drivers\megasas.sys
+windows:persistence:windows_service,System32\drivers\megasr.sys
+windows:persistence:windows_service,System32\drivers\mountmgr.sys
+windows:persistence:windows_service,System32\drivers\mpsdrv.sys
+windows:persistence:windows_service,System32\drivers\msisadrv.sys
+windows:persistence:windows_service,System32\drivers\mvumis.sys
+windows:persistence:windows_service,System32\drivers\ndiscap.sys
+windows:persistence:windows_service,System32\drivers\nvraid.sys
+windows:persistence:windows_service,System32\drivers\nvstor.sys
+windows:persistence:windows_service,System32\drivers\pacer.sys
+windows:persistence:windows_service,System32\drivers\partmgr.sys
+windows:persistence:windows_service,System32\drivers\pci.sys
+windows:persistence:windows_service,System32\drivers\pciide.sys
+windows:persistence:windows_service,System32\drivers\pcmcia.sys
+windows:persistence:windows_service,System32\drivers\pcw.sys
+windows:persistence:windows_service,System32\drivers\percsas2i.sys
+windows:persistence:windows_service,System32\drivers\percsas3i.sys
+windows:persistence:windows_service,System32\drivers\ql2300i.sys
+windows:persistence:windows_service,System32\drivers\ql40xx2i.sys
+windows:persistence:windows_service,System32\drivers\qlfcoei.sys
+windows:persistence:windows_service,System32\drivers\rdpdr.sys
+windows:persistence:windows_service,System32\drivers\rdpvideominiport.sys
+windows:persistence:windows_service,System32\drivers\sbp2port.sys
+windows:persistence:windows_service,System32\drivers\scmbus.sys
+windows:persistence:windows_service,System32\drivers\sisraid4.sys
+windows:persistence:windows_service,System32\drivers\spaceport.sys
+windows:persistence:windows_service,System32\drivers\stexstor.sys
+windows:persistence:windows_service,System32\drivers\storahci.sys
+windows:persistence:windows_service,System32\drivers\stornvme.sys
+windows:persistence:windows_service,System32\drivers\storufs.sys
+windows:persistence:windows_service,System32\drivers\storvsc.sys
+windows:persistence:windows_service,System32\drivers\tcpip.sys
+windows:persistence:windows_service,System32\drivers\tcpipreg.sys
+windows:persistence:windows_service,System32\drivers\vdrvroot.sys
+windows:persistence:windows_service,System32\drivers\vioscsi.sys
+windows:persistence:windows_service,System32\drivers\vmbus.sys
+windows:persistence:windows_service,System32\drivers\vmstorfl.sys
+windows:persistence:windows_service,System32\drivers\volmgr.sys
+windows:persistence:windows_service,System32\drivers\volmgrx.sys
+windows:persistence:windows_service,System32\drivers\volsnap.sys
+windows:persistence:windows_service,System32\drivers\volume.sys
+windows:persistence:windows_service,System32\drivers\vsmraid.sys
+windows:persistence:windows_service,System32\drivers\vstxraid.sys
+windows:persistence:windows_service,System32\drivers\wfplwfs.sys
+windows:persistence:windows_service,\SystemRoot\System32\DriverStore\FileRepository\compositebus.inf_amd64_a140581a8f8b58b7\CompositeBus.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\1394ohci.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\AcpiDev.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\AgileVpn.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\BasicDisplay.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\BasicRender.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\CmBatt.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\HDAudBus.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\HidBatt.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\IPMIDrv.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\IndirectKmd.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\MTConfig.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\NdisVirtualBus.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\Synth3dVsc.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\TsUsbGD.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\UEFI.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\USBSTOR.SYS
+windows:persistence:windows_service,\SystemRoot\System32\drivers\USBXHCI.SYS
+windows:persistence:windows_service,\SystemRoot\System32\drivers\UcmUcsi.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\UfxChipidea.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\UsbHub3.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\VMBusHID.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\WUDFRd.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\WinUSB.SYS
+windows:persistence:windows_service,\SystemRoot\System32\drivers\acpipagr.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\acpipmi.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\acpitime.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\amdk8.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\amdppm.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\asyncmac.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\balloon.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\bcmfn.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\bcmfn2.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\buttonconverter.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\capimg.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\cdrom.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\cht4vx64.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\dmvsc.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\dxgkrnl.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\errdev.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\fcvsc.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\fdc.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\fileinfo.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\flpydisk.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\genericusbfn.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\hidbth.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\hidinterrupt.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\hidusb.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\hyperkbd.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\i8042prt.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\iaLPSSi_GPIO.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\iaLPSSi_I2C.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\ibbus.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\intelppm.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\kbdclass.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\kbdhid.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\kdnic.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\mlx4_bus.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\monitor.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\mouclass.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\mouhid.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\msgpiowin32.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\mshidkmdf.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\mshidumdf.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\msiscsi.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\mssmbios.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\ndfltr.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\ndiswan.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\netkvm.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\netvsc.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\npsvctrig.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\parport.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\processr.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\pvpanic.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\rasgre.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\rasl2tp.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\raspppoe.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\raspptp.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\rassstp.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\rdpbus.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\registry.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\scmdisk0101.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\sdbus.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\sdstor.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\serenum.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\serial.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\sermouse.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\sfloppy.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\swenum.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\terminpt.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\tpm.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\tsusbhub.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\tunnel.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\uaspstor.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\ufxsynopsys.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\umbus.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\umpass.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\urschipidea.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\urssynopsys.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\usbccgp.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\usbehci.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\usbhub.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\usbohci.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\usbprint.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\usbser.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\usbuhci.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\vhdmp.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\vhf.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\vmgencounter.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\vmgid.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\vms3cap.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\vpci.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\vwifibus.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\wacompen.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\winmad.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\winverbs.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\wmiacpi.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\xboxgip.sys
+windows:persistence:windows_service,\SystemRoot\System32\drivers\xinputhid.sys
+windows:persistence:windows_service,\SystemRoot\system32\DRIVERS\HyperVideo.sys
+windows:persistence:windows_service,\SystemRoot\system32\DRIVERS\gga.sys
+windows:persistence:windows_service,\SystemRoot\system32\DRIVERS\tdx.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\AppvStrm.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\AppvVemgr.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\AppvVfs.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\UevAgentDriver.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\afd.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\ksthunk.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\luafv.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\mmcss.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\qwavedrv.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\wcifs.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\wcnfs.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\wd\WdBoot.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\wd\WdFilter.sys
+windows:persistence:windows_service,\SystemRoot\system32\drivers\ws2ifsl.sys
+windows:persistence:windows_service,system32\DRIVERS\RsFx0600.sys
+windows:persistence:windows_service,system32\DRIVERS\ahcache.sys
+windows:persistence:windows_service,system32\DRIVERS\bowser.sys
+windows:persistence:windows_service,system32\DRIVERS\cdfs.sys
+windows:persistence:windows_service,system32\DRIVERS\ipfltdrv.sys
+windows:persistence:windows_service,system32\DRIVERS\mrxsmb.sys
+windows:persistence:windows_service,system32\DRIVERS\mrxsmb10.sys
+windows:persistence:windows_service,system32\DRIVERS\mrxsmb20.sys
+windows:persistence:windows_service,system32\DRIVERS\rdbss.sys
+windows:persistence:windows_service,system32\DRIVERS\sacdrv.sys
+windows:persistence:windows_service,system32\DRIVERS\udfs.sys
+windows:persistence:windows_service,system32\drivers\HTTP.sys
+windows:persistence:windows_service,system32\drivers\SerCx.sys
+windows:persistence:windows_service,system32\drivers\SerCx2.sys
+windows:persistence:windows_service,system32\drivers\SpbCx.sys
+windows:persistence:windows_service,system32\drivers\VerifierExt.sys
+windows:persistence:windows_service,system32\drivers\Wdf01000.sys
+windows:persistence:windows_service,system32\drivers\WindowsTrustedRT.sys
+windows:persistence:windows_service,system32\drivers\WudfPf.sys
+windows:persistence:windows_service,system32\drivers\appid.sys
+windows:persistence:windows_service,system32\drivers\applockerfltr.sys
+windows:persistence:windows_service,system32\drivers\csc.sys
+windows:persistence:windows_service,system32\drivers\dam.sys
+windows:persistence:windows_service,system32\drivers\dfs.sys
+windows:persistence:windows_service,system32\drivers\dfsrro.sys
+windows:persistence:windows_service,system32\drivers\filecrypt.sys
+windows:persistence:windows_service,system32\drivers\filetrace.sys
+windows:persistence:windows_service,system32\drivers\fltmgr.sys
+windows:persistence:windows_service,system32\drivers\hvservice.sys
+windows:persistence:windows_service,system32\drivers\ipsecgw.sys
+windows:persistence:windows_service,system32\drivers\lltdio.sys
+windows:persistence:windows_service,system32\drivers\modem.sys
+windows:persistence:windows_service,system32\drivers\mslldp.sys
+windows:persistence:windows_service,system32\drivers\ndis.sys
+windows:persistence:windows_service,system32\drivers\ndisuio.sys
+windows:persistence:windows_service,system32\drivers\netbios.sys
+windows:persistence:windows_service,system32\drivers\nsiproxy.sys
+windows:persistence:windows_service,system32\drivers\pdc.sys
+windows:persistence:windows_service,system32\drivers\peauth.sys
+windows:persistence:windows_service,system32\drivers\rspndr.sys
+windows:persistence:windows_service,system32\drivers\storqosflt.sys
+windows:persistence:windows_service,system32\drivers\tsusbflt.sys
+windows:persistence:windows_service,system32\drivers\ucx01000.sys
+windows:persistence:windows_service,system32\drivers\udecx.sys
+windows:persistence:windows_service,system32\drivers\ufx01000.sys
+windows:persistence:windows_service,system32\drivers\urscx01000.sys
+windows:persistence:windows_service,system32\drivers\wd\KslD.sys
+windows:persistence:windows_service,system32\drivers\wd\WdAiNisDrv.sys
+windows:persistence:windows_service,system32\drivers\wd\WdNisDrv.sys
+windows:persistence:windows_service,system32\drivers\wimmount.sys
+windows:persistence:windows_service,system32\drivers\winnat.sys
+windows:persistence:winlogon_shell_property,explorer.exe
+windows:persistence:winlogon_userinit_property,"C:\Windows\system32\userinit.exe,"

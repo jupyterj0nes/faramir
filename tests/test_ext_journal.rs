@@ -118,8 +118,11 @@ fn recovered_files_become_tagged_events() {
     assert_eq!(cron.timestamp.len(), 23);
     let prev = ev.iter().find(|e| e.artifact == "linux:previous_version:cron:system_job").unwrap();
     let cmd = prev.commandline.as_deref().unwrap();
-    assert!(cmd.contains(&truth("gpt", "previous_crontab")) && cmd.contains("[previous version written") && cmd.contains("(File: crontab)"), "{cmd}");
-    assert!(!cmd.contains("stg_") && !cmd.contains("_v2_ino") && !cmd.contains('\\'), "staging path leaked: {cmd}");
+    assert!(cmd.contains(&truth("gpt", "previous_crontab")) && cmd.contains("[previous version written") && !cmd.contains("(File:"), "{cmd}");
+    assert!(prev.source_file.ends_with("/etc/crontab"), "source_file is the recovered file's path in the volume: {}", prev.source_file);
+    for s in [cmd, prev.source_file.as_str()] {
+        assert!(!s.contains("stg_") && !s.contains("_v2_ino") && !s.contains('\\'), "staging path leaked: {s}");
+    }
     // nothing recovered is also a live row
     for e in &ev {
         assert!(!live.iter().any(|l| l.artifact == e.artifact), "{}", e.artifact);
@@ -439,7 +442,7 @@ fn staging_layout_and_manifest_round_trip() {
     assert!(by_art.contains(&"linux:deleted:file"), "{by_art:?}");
     let reused = ev.iter().find(|e| e.commandline.as_deref().unwrap_or("").contains("/etc/cron.d/reused")).unwrap();
     assert!(reused.commandline.as_deref().unwrap().contains("content blocks reused"), "{:?}", reused.commandline);
-    assert_eq!(reused.parentprocessname, "ext4 journal");
+    assert_eq!(reused.source_file, "ext4 journal");
     let prev = ev.iter().find(|e| e.artifact.starts_with("linux:previous_version:")).unwrap();
     let cmd = prev.commandline.as_deref().unwrap();
     assert!(cmd.contains("[previous version written 2023-11-14 22:13:20.000, journal seq 2 (replaced by rename)]") && cmd.contains("/etc/crontab"), "{cmd}");
