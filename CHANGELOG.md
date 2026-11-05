@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-11-05)
 
 ### Faramir's own header: 19 columns in masstin's verticals, nothing dropped
 
