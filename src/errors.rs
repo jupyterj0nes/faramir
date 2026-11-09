@@ -283,6 +283,8 @@ pub enum FaramirError {
     // ─── 6000..6999: CLI & Argument Validation ──────────────────────────────
     /// No evidence target provided (6001)
     CliNoTarget(String),
+    /// A worker thread panicked while analysing a target; that target's rows are missing from the CSV and faramir exits with code 2.
+    WorkerPanicked(String),
     /// Invalid action requested (6002)
     CliInvalidAction(String),
     /// Target path does not exist (6003)
@@ -451,6 +453,7 @@ impl FaramirError {
             Self::OutDirCreateFailed(_) => "ERR_OUT_DIRECTORY_CREATE",
 
             Self::CliNoTarget(_) => "ERR_CLI_NO_TARGET",
+            Self::WorkerPanicked(_) => "ERR_CLI_WORKER_PANIC",
             Self::CliInvalidAction(_) => "ERR_CLI_INVALID_ACTION",
             Self::CliPathNotFound(_) => "ERR_CLI_PATH_NOT_FOUND",
 
@@ -602,6 +605,7 @@ impl FaramirError {
             Self::OutDirCreateFailed(_) => 5004,
 
             Self::CliNoTarget(_) => 6001,
+            Self::WorkerPanicked(_) => 6004,
             Self::CliInvalidAction(_) => 6002,
             Self::CliPathNotFound(_) => 6003,
 
@@ -827,6 +831,7 @@ impl FaramirError {
             | Self::OutCsvFlushFailed(s)
             | Self::OutDirCreateFailed(s)
             | Self::CliNoTarget(s)
+            | Self::WorkerPanicked(s)
             | Self::CliInvalidAction(s)
             | Self::CliPathNotFound(s)
             | Self::HuntBaselineInvalid(s)
@@ -974,6 +979,7 @@ impl FaramirError {
             Self::OutCsvFlushFailed(e()),
             Self::OutDirCreateFailed(e()),
             Self::CliNoTarget(e()),
+            Self::WorkerPanicked(e()),
             Self::CliInvalidAction(e()),
             Self::CliPathNotFound(e()),
             Self::HuntBaselineInvalid(e()),
@@ -1126,6 +1132,7 @@ impl fmt::Display for FaramirError {
             Self::OutDirCreateFailed(p) => write!(f, "Cannot create output directory: {}", p),
 
             Self::CliNoTarget(msg) => write!(f, "No evidence targets provided: {}", msg),
+            Self::WorkerPanicked(msg) => write!(f, "A worker panicked on a target, its rows are missing from the CSV: {}", msg),
             Self::CliInvalidAction(msg) => write!(f, "Invalid CLI action: {}", msg),
             Self::CliPathNotFound(p) => write!(f, "Target path does not exist: {}", p),
 

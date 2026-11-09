@@ -196,6 +196,14 @@ struct Args {
     #[arg(long = "carry-marks", value_name = "CSV")]
     carry_marks: Vec<PathBuf>,
 
+    /// Targets (disk images, triage archives, directories, files) analysed at
+    /// the same time, each on its own thread. Default, and 0: the cores
+    /// available, at most 4. 1 is the sequential run. Each job needs about
+    /// the memory of the largest dirty hive of its host; the CSV is the same
+    /// whatever the number.
+    #[arg(long = "jobs", value_name = "N")]
+    jobs: Option<usize>,
+
     /// Action to perform
     #[arg(default_value = "all")]
     action: Action,
@@ -370,6 +378,129 @@ fn carve_and_process(
     }
 }
 
+/// One unit of work for the workers: a piece of evidence analysed on its
+/// own. The index is the one the sequential run used for the staging folder
+/// and the "[i/N]" line.
+#[derive(Debug, Clone)]
+enum Target {
+    Image(usize, PathBuf),
+    Archive(usize, PathBuf),
+    Dir(PathBuf),
+    File(usize, PathBuf),
+}
+
+impl Target {
+    fn label(&self) -> String {
+        match self {
+            Target::Image(_, p) | Target::Archive(_, p) | Target::Dir(p) | Target::File(_, p) => p.display().to_string(),
+        }
+    }
+}
+
+/// How many of each kind there are, for the "[i/N]" lines.
+#[derive(Debug, Clone, Copy)]
+struct Counts {
+    images: usize,
+    archives: usize,
+}
+
+/// What a worker hands back for one target: its rows, the diagnostics it
+/// recorded while on it, and whether it carved a plain file.
+struct TargetResult {
+    events: Vec<event::Event>,
+    diagnostics: Vec<faramir::errors::FaramirError>,
+    carved_file: bool,
+}
+
+/// Analyse one target exactly as the sequential run did, on whatever thread
+/// the pool gave it. The rows go to a vector of this target's own; the
+/// diagnostics are drained from the worker's sink and returned, so the main
+/// thread can absorb them in target order.
+fn process_target(target: &Target, args: &Args, counts: Counts) -> TargetResult {
+    let mut events: Vec<event::Event> = Vec::new();
+    let mut carved_file = false;
+    match target {
+        Target::Image(idx, img) => {
+            let idx = *idx;
+            let staging = std::env::temp_dir().join(format!("faramir_img_{}_{}", std::process::id(), idx));
+            let _ = std::fs::create_dir_all(&staging);
+            if !args.silent {
+                println!("  [{}/{}] Extracting image: {}", idx + 1, counts.images, img.file_name().unwrap_or_default().to_string_lossy());
+            }
+            let (extracted, live) = match ingest::image::unpack_disk_image(img, &staging, args.silent) {
+                Ok(extracted) => {
+                    let live = process_target_directory(&extracted, &args.action, args.silent, &mut events, None);
+                    (Some(extracted), live)
+                }
+                Err(e) => {
+                    diag::record(faramir::errors::FaramirError::ImageOpenFailed(format!("{}: {e}", img.display())));
+                    (None, Vec::new())
+                }
+            };
+            if args.carve {
+                let hostname = img.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Unknown".to_string());
+                carve_and_process(img, &staging, extracted.as_deref(), &live, &hostname, &args.action, args.silent, &mut events);
+            }
+            let _ = std::fs::remove_dir_all(&staging);
+        }
+        Target::Archive(idx, archive) => {
+            let idx = *idx;
+            let staging = std::env::temp_dir().join(format!("faramir_arc_{}_{}", std::process::id(), idx));
+            let _ = std::fs::create_dir_all(&staging);
+            let triage = ingest::archive::inspect_triage_archive(archive);
+            let triage_host = triage.as_ref().and_then(|t| t.hostname.clone());
+            if !args.silent {
+                let label = triage
+                    .as_ref()
+                    .map(|t| format!(" [{}{}]", t.kind.label(), triage_host.as_deref().map(|h| format!(", host {h}")).unwrap_or_default()))
+                    .unwrap_or_default();
+                println!("  [{}/{}] Unpacking triage: {}{}", idx + 1, counts.archives, archive.file_name().unwrap_or_default().to_string_lossy(), label);
+            }
+            match ingest::archive::unpack_archive_recursive(archive, &staging, args.silent) {
+                Ok(extracted_dirs) => {
+                    for dir in extracted_dirs {
+                        process_target_directory(&dir, &args.action, args.silent, &mut events, triage_host.as_deref());
+                    }
+                }
+                Err(e) => {
+                    diag::record(faramir::errors::FaramirError::ArchiveUnpackError(format!("{}: {e}", archive.display())));
+                }
+            }
+            let _ = std::fs::remove_dir_all(&staging);
+        }
+        Target::Dir(dir) => {
+            process_target_directory(dir, &args.action, args.silent, &mut events, None);
+        }
+        Target::File(idx, file) => {
+            let idx = *idx;
+            let path = file.as_path();
+            let hostname = "SingleFile";
+            let fname = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+            if fname.ends_with(".service") || fname.contains("cron") || fname.contains("profile") {
+                events.extend(parsers::linux::process_linux_target(path, hostname));
+            } else if args.carve && !faramir::carve::hive::starts_with_regf(path) {
+                // not a hive: treat it as a blob to carve (pagefile, memory dump, slack dump)
+                carved_file = true;
+                let staging = std::env::temp_dir().join(format!("faramir_carve_{}_{}", std::process::id(), idx));
+                let _ = std::fs::create_dir_all(&staging);
+                let host = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| hostname.to_string());
+                carve_and_process(path, &staging, None, &[], &host, &args.action, args.silent, &mut events);
+                let _ = std::fs::remove_dir_all(&staging);
+            } else {
+                let parent = path.parent().unwrap_or(path).to_path_buf();
+                let mut set = HiveSet::from_paths(&[path.to_path_buf()], &parent);
+                if !set.is_empty() {
+                    let persistences = run_windows(&mut set, &args.action, &parent);
+                    for p in &persistences {
+                        events.push(windows::persistence_to_event_in(p, hostname, Some(&parent)));
+                    }
+                }
+            }
+        }
+    }
+    TargetResult { events, diagnostics: diag::drain(), carved_file }
+}
+
 fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         let msg = info
@@ -444,99 +575,53 @@ fn main() -> Result<()> {
         if raw_files.is_empty() { None } else { Some(&raw_files) },
     );
 
-    let mut all_events: Vec<event::Event> = Vec::new();
+    let jobs = match args.jobs {
+        Some(0) | None => faramir::jobs::default_jobs(),
+        Some(n) => n,
+    };
 
-    // 1. Forensic disk images
-    if !images.is_empty() {
-        if !args.silent {
+    // Every target in the order the sequential run took them: images, then
+    // archives, then directories, then files. The workers finish them in
+    // any order; the results go back into this one.
+    let mut targets: Vec<Target> = Vec::new();
+    targets.extend(images.iter().cloned().enumerate().map(|(i, p)| Target::Image(i, p)));
+    targets.extend(archives.iter().cloned().enumerate().map(|(i, p)| Target::Archive(i, p)));
+    targets.extend(direct_dirs.iter().cloned().map(Target::Dir));
+    targets.extend(direct_files.iter().cloned().enumerate().map(|(i, p)| Target::File(i, p)));
+
+    if !args.silent {
+        if !images.is_empty() {
             println!("💿 Discovered {} forensic disk image(s). Parsing NTFS & VSS...", images.len());
         }
-        for (idx, img) in images.iter().enumerate() {
-            let staging = std::env::temp_dir().join(format!("faramir_img_{}_{}", std::process::id(), idx));
-            let _ = std::fs::create_dir_all(&staging);
-            if !args.silent {
-                println!("  [{}/{}] Extracting image: {}", idx + 1, images.len(), img.file_name().unwrap_or_default().to_string_lossy());
-            }
-            let (extracted, live) = match ingest::image::unpack_disk_image(img, &staging, args.silent) {
-                Ok(extracted) => {
-                    let live = process_target_directory(&extracted, &args.action, args.silent, &mut all_events, None);
-                    (Some(extracted), live)
-                }
-                Err(e) => {
-                    diag::record(faramir::errors::FaramirError::ImageOpenFailed(format!("{}: {e}", img.display())));
-                    (None, Vec::new())
-                }
-            };
-            if args.carve {
-                let hostname = img.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Unknown".to_string());
-                carve_and_process(img, &staging, extracted.as_deref(), &live, &hostname, &args.action, args.silent, &mut all_events);
-            }
-            let _ = std::fs::remove_dir_all(&staging);
-        }
-    }
-
-    // 2. Forensic archives / triages
-    if !archives.is_empty() {
-        if !args.silent {
+        if !archives.is_empty() {
             println!("📦 Discovered {} forensic archive(s) / triage packages...", archives.len());
         }
-        for (idx, archive) in archives.iter().enumerate() {
-            let staging = std::env::temp_dir().join(format!("faramir_arc_{}_{}", std::process::id(), idx));
-            let _ = std::fs::create_dir_all(&staging);
-            let triage = ingest::archive::inspect_triage_archive(archive);
-            let triage_host = triage.as_ref().and_then(|t| t.hostname.clone());
-            if !args.silent {
-                let label = triage
-                    .as_ref()
-                    .map(|t| format!(" [{}{}]", t.kind.label(), triage_host.as_deref().map(|h| format!(", host {h}")).unwrap_or_default()))
-                    .unwrap_or_default();
-                println!("  [{}/{}] Unpacking triage: {}{}", idx + 1, archives.len(), archive.file_name().unwrap_or_default().to_string_lossy(), label);
-            }
-            match ingest::archive::unpack_archive_recursive(archive, &staging, args.silent) {
-                Ok(extracted_dirs) => {
-                    for dir in extracted_dirs {
-                        process_target_directory(&dir, &args.action, args.silent, &mut all_events, triage_host.as_deref());
-                    }
-                }
-                Err(e) => {
-                    diag::record(faramir::errors::FaramirError::ArchiveUnpackError(format!("{}: {e}", archive.display())));
-                }
-            }
-            let _ = std::fs::remove_dir_all(&staging);
+        if targets.len() > 1 && jobs > 1 {
+            println!(
+                "🧵 {} target(s) on {} worker(s); the console lines of targets running at the same time interleave, the CSV does not depend on it",
+                targets.len(),
+                jobs.min(targets.len())
+            );
         }
     }
 
-    // 3. Direct directories
-    for dir in direct_dirs {
-        process_target_directory(&dir, &args.action, args.silent, &mut all_events, None);
-    }
+    let counts = Counts { images: images.len(), archives: archives.len() };
+    let outcomes = faramir::jobs::run_all(&targets, jobs, |_, t| process_target(t, &args, counts));
 
-    // 4. Direct individual files
+    let mut all_events: Vec<event::Event> = Vec::new();
     let mut carved_any_file = false;
-    for (idx, file) in direct_files.iter().enumerate() {
-        let path = file.as_path();
-        let hostname = "SingleFile";
-        let fname = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
-        if fname.ends_with(".service") || fname.contains("cron") || fname.contains("profile") {
-            let linux_events = parsers::linux::process_linux_target(path, hostname);
-            all_events.extend(linux_events);
-        } else if args.carve && !faramir::carve::hive::starts_with_regf(path) {
-            // not a hive: treat it as a blob to carve (pagefile, memory dump, slack dump)
-            carved_any_file = true;
-            let staging = std::env::temp_dir().join(format!("faramir_carve_{}_{}", std::process::id(), idx));
-            let _ = std::fs::create_dir_all(&staging);
-            let host = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| hostname.to_string());
-            carve_and_process(path, &staging, None, &[], &host, &args.action, args.silent, &mut all_events);
-            let _ = std::fs::remove_dir_all(&staging);
-        } else {
-            let parent = path.parent().unwrap_or(path).to_path_buf();
-            let mut set = HiveSet::from_paths(&[path.to_path_buf()], &parent);
-            if set.is_empty() {
-                continue;
+    let mut panicked = 0usize;
+    for (target, outcome) in targets.iter().zip(outcomes) {
+        match outcome {
+            faramir::jobs::Outcome::Done(r) => {
+                all_events.extend(r.events);
+                diag::absorb(r.diagnostics);
+                carved_any_file |= r.carved_file;
             }
-            let persistences = run_windows(&mut set, &args.action, &parent);
-            for p in &persistences {
-                all_events.push(windows::persistence_to_event_in(p, hostname, Some(&parent)));
+            faramir::jobs::Outcome::Panicked(msg, diagnostics) => {
+                diag::absorb(diagnostics);
+                diag::record(faramir::errors::FaramirError::WorkerPanicked(format!("{}: {msg}", target.label())));
+                panicked += 1;
             }
         }
     }
@@ -584,5 +669,9 @@ fn main() -> Result<()> {
         println!("📝 Marks carried from {} file(s): {} row(s) with a verdict or notes", marks.files, marks.len());
     }
     csv_out::export_timeline(&all_events, verdicts, &marks, &out_file, args.silent)?;
+    if panicked > 0 {
+        eprintln!("{panicked} target(s) could not be analysed (ERR_CLI_WORKER_PANIC above); their rows are missing from {}", out_file.display());
+        std::process::exit(2);
+    }
     Ok(())
 }

@@ -88,6 +88,7 @@ faramir [OPTIONS] [ACTION]
 | `--alpha <ALPHA>` | False-discovery rate of the statistical test, the share of `significant` rows allowed to be false alarms. Default `0.05`. |
 | `--carry-marks <CSV>` | An earlier faramir CSV of the same evidence: its `verdict` and `notes` are copied onto every row with the same 14 event columns (the row hash masstin's `--carry-marks` uses, computed over faramir's columns), so marking is not lost when the evidence is parsed again. Repeatable. |
 | `--no-hunt` | Leave `hunt`, `hunt_score` and `hunt_why` empty. |
+| `--jobs <N>` | Targets (disk images, triage archives, directories, files) analysed at the same time, each on its own thread. Default, and 0: the cores available, at most 4. `1` is the sequential run. The rows come back in the order the targets were found, so the CSV is byte for byte the same whatever `N`; the console lines of targets running at the same time interleave. Each job needs about the memory of the largest dirty hive of its host, and N images read at once from one mechanical disk get in each other's way. |
 | `--source-evidence <DIR>`, `--csv-output <DIR>` | Legacy Boromir flags, still accepted. |
 | `[ACTION]` | `all` (default), any `get-*` technique from the tables below, `get-deleted-persistence`, `get-linux-persistence`. |
 

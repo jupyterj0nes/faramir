@@ -9,3 +9,4 @@ pub mod windows;
 pub mod browser_ext;
 pub mod carve;
 pub mod hunt;
+pub mod jobs;

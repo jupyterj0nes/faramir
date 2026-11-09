@@ -1,36 +1,43 @@
-//! Thread-local diagnostics sink for the Windows persistence engine.
+//! Diagnostics sink.
 //!
 //! Every degraded path (hive skipped, log rejected, technique panicked…)
 //! records a [`FaramirError`] here. Errors and warnings are echoed to stderr
 //! with their code; infos are only echoed in verbose mode. Tests drain the
 //! sink to assert that the right code was produced.
+//!
+//! The sink is per thread. A worker thread of [`crate::jobs`] records into
+//! its own while it analyses a target, drains it when the target is done and
+//! hands the list back; the main thread puts the lists into its sink in
+//! target order with [`absorb`], so the summary at the end is the same
+//! whatever thread did the work. Quiet and verbose are process-wide.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::errors::{FaramirError, Severity};
 
 thread_local! {
     static SINK: RefCell<Vec<FaramirError>> = const { RefCell::new(Vec::new()) };
-    static QUIET: Cell<bool> = const { Cell::new(false) };
-    static VERBOSE: Cell<bool> = const { Cell::new(false) };
 }
+static QUIET: AtomicBool = AtomicBool::new(false);
+static VERBOSE: AtomicBool = AtomicBool::new(false);
 
 /// Suppress all stderr echo (the sink still collects everything).
 pub fn set_quiet(quiet: bool) {
-    QUIET.with(|q| q.set(quiet));
+    QUIET.store(quiet, Ordering::Relaxed);
 }
 
 pub fn is_quiet() -> bool {
-    QUIET.with(|q| q.get())
+    QUIET.load(Ordering::Relaxed)
 }
 
 /// Also echo `Info` level diagnostics to stderr.
 pub fn set_verbose(verbose: bool) {
-    VERBOSE.with(|v| v.set(verbose));
+    VERBOSE.store(verbose, Ordering::Relaxed);
 }
 
 pub fn is_verbose() -> bool {
-    VERBOSE.with(|v| v.get())
+    VERBOSE.load(Ordering::Relaxed)
 }
 
 /// Record a diagnostic. Returns the same error so callers can write
@@ -49,6 +56,12 @@ pub fn record(err: FaramirError) -> FaramirError {
     }
     SINK.with(|s| s.borrow_mut().push(err.clone()));
     err
+}
+
+/// Put diagnostics a worker recorded (and already echoed) into this thread's
+/// sink, in the order given.
+pub fn absorb(errs: Vec<FaramirError>) {
+    SINK.with(|s| s.borrow_mut().extend(errs));
 }
 
 /// Remove and return every recorded diagnostic.
