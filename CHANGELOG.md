@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 (2026-11-09)
+
+- **`--jobs` defaults to every thread the system gives the process**, not four: `std::thread::available_parallelism`, which honours affinity masks and container quotas, and never more workers than targets. The cap of four was a guess at a memory budget that cannot be known before a host is opened (a worker costs the replayed dirty hives of its host while it is on it), so it was holding a 16-core machine with 32 GB to four workers; the knob for a machine short of RAM, or reading several images from one mechanical disk, is `--jobs N`. The CSV does not depend on the number. Tests: `src/jobs.rs` (the default is the parallelism reported), `tests/test_jobs_cli.rs` (the workers line names it).
+
 ## 0.5.0 (2026-11-09)
 
 ### `--jobs`: targets analysed side by side, the CSV unchanged

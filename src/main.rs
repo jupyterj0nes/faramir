@@ -131,7 +131,7 @@ impl Action {
 #[derive(Parser, Debug)]
 #[command(
     name = "faramir",
-    version = "0.5.0",
+    version = "0.5.1",
     about = "Forensic persistence hunting tool for Windows and Linux triage, images (E01/RAW/ZIP) and offline filesystems"
 )]
 struct Args {
@@ -197,10 +197,12 @@ struct Args {
     carry_marks: Vec<PathBuf>,
 
     /// Targets (disk images, triage archives, directories, files) analysed at
-    /// the same time, each on its own thread. Default, and 0: the cores
-    /// available, at most 4. 1 is the sequential run. Each job needs about
-    /// the memory of the largest dirty hive of its host; the CSV is the same
-    /// whatever the number.
+    /// the same time, each on its own thread. Default, and 0: every thread
+    /// the system gives the process (the logical cores, less any affinity or
+    /// container limit), never more than there are targets. 1 is the
+    /// sequential run. Each job needs about the memory of the largest dirty
+    /// hive of its host, so lower it on a machine with little RAM; the CSV is
+    /// the same whatever the number.
     #[arg(long = "jobs", value_name = "N")]
     jobs: Option<usize>,
 

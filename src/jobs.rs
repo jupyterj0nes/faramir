@@ -24,14 +24,18 @@ use std::sync::Mutex;
 use crate::errors::FaramirError;
 use crate::windows::diag;
 
-/// Workers used when `--jobs` is not given: the cores available, at most this.
-/// Each job needs about the memory of the largest dirty hive of its host,
-/// which is what keeps the default small.
-pub const DEFAULT_JOBS_CAP: usize = 4;
-
-/// Workers to use when `--jobs` is not given, or is 0.
+/// Workers to use when `--jobs` is not given, or is 0: the threads the
+/// system lets this process run at the same time (the logical cores, less
+/// what an affinity mask or a container quota takes away), one when that
+/// cannot be read. `run_all` never starts more workers than targets, so a
+/// run on two images uses two whatever the machine has.
+///
+/// The number is not a measure of the memory the run will need: a worker
+/// costs the replayed dirty hives of its host while it is on it, and that is
+/// not known before the host is opened. `--jobs` is the knob for a machine
+/// with little RAM or with the images on one mechanical disk.
 pub fn default_jobs() -> usize {
-    std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).clamp(1, DEFAULT_JOBS_CAP)
+    std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1)
 }
 
 /// What came out of one target.
@@ -174,8 +178,11 @@ mod tests {
     }
 
     #[test]
-    fn default_jobs_is_between_one_and_the_cap() {
+    fn default_jobs_is_the_parallelism_the_system_gives_the_process() {
         let d = default_jobs();
-        assert!((1..=DEFAULT_JOBS_CAP).contains(&d), "{d}");
+        assert!(d >= 1, "{d}");
+        if let Ok(n) = std::thread::available_parallelism() {
+            assert_eq!(d, n.get(), "no cap: every thread the process may run");
+        }
     }
 }
