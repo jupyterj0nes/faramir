@@ -131,7 +131,7 @@ impl Action {
 #[derive(Parser, Debug)]
 #[command(
     name = "faramir",
-    version = "0.4.0",
+    version = "0.5.0",
     about = "Forensic persistence hunting tool for Windows and Linux triage, images (E01/RAW/ZIP) and offline filesystems"
 )]
 struct Args {
@@ -566,7 +566,7 @@ fn main() -> Result<()> {
     };
 
     if !args.silent {
-        println!("⚔️  Faramir v0.4.0 - DFIR Persistence Hunting Tool");
+        println!("⚔️  Faramir v0.5.0 - DFIR Persistence Hunting Tool");
         println!("==================================================");
     }
 
