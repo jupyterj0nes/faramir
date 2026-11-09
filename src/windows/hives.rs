@@ -580,17 +580,53 @@ pub fn discover_hives(root: &Path) -> Vec<HiveInfo> {
 
 pub type HiveFile = Hive<HiveSource, CleanHive>;
 
-/// Bytes behind an opened hive: the file itself, or the in-memory copy a transaction log
-/// replay produced (the evidence file is never written).
+/// Bytes behind an opened hive.
+///
+/// A clean hive is memory-mapped (`Mapped`): the operating system brings each
+/// 4 KiB page in the first time a technique touches it and drops pages again
+/// under memory pressure, so nothing is loaded up front and a 500 MB SOFTWARE
+/// costs no resident memory beyond the pages in use. The techniques seek
+/// through a hive thousands of times; through a `BufReader` every seek threw
+/// the buffer away and became a system call, through the map it is a memory
+/// read. When the map cannot be made (3050 is recorded) the hive is read
+/// through the buffered file (`File`), same bytes, same result, slower. A
+/// dirty hive is the in-memory copy its transaction-log replay produced
+/// (`Replayed`); the evidence file is never written.
 #[derive(Debug)]
 pub enum HiveSource {
+    Mapped(Cursor<memmap2::Mmap>),
     File(BufReader<File>),
     Replayed(Cursor<Vec<u8>>),
+}
+
+impl HiveSource {
+    /// Map `path`, or fall back to a buffered file. The map is read-only and
+    /// the evidence is a copy nobody writes while faramir runs, which is what
+    /// makes the mapping sound.
+    pub fn open(path: &Path) -> Result<Self, FaramirError> {
+        let file = File::open(path).map_err(|e| FaramirError::HiveOpenFailed(format!("{}: {e}", path.display())))?;
+        // SAFETY: the file is opened read-only from an evidence copy that is
+        // not modified while it is mapped; a truncation would surface as a
+        // read error inside nt_hive2, which every caller already handles.
+        match unsafe { memmap2::Mmap::map(&file) } {
+            Ok(map) => Ok(HiveSource::Mapped(Cursor::new(map))),
+            Err(e) => {
+                diag::record(FaramirError::HiveMapFailed(format!("{}: {e}", path.display())));
+                Ok(HiveSource::File(BufReader::new(file)))
+            }
+        }
+    }
+
+    /// `true` when the hive is read through the memory map.
+    pub fn is_mapped(&self) -> bool {
+        matches!(self, HiveSource::Mapped(_))
+    }
 }
 
 impl Read for HiveSource {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
+            HiveSource::Mapped(r) => r.read(buf),
             HiveSource::File(r) => r.read(buf),
             HiveSource::Replayed(r) => r.read(buf),
         }
@@ -600,6 +636,7 @@ impl Read for HiveSource {
 impl Seek for HiveSource {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         match self {
+            HiveSource::Mapped(r) => r.seek(pos),
             HiveSource::File(r) => r.seek(pos),
             HiveSource::Replayed(r) => r.seek(pos),
         }
@@ -625,8 +662,7 @@ fn parse_hive_file(
     path: &Path,
     header: &HiveHeader,
 ) -> Result<Hive<HiveSource, DirtyHive>, FaramirError> {
-    let file = File::open(path).map_err(|e| FaramirError::HiveOpenFailed(format!("{}: {e}", path.display())))?;
-    parse_hive_source(path, header, HiveSource::File(BufReader::new(file)))
+    parse_hive_source(path, header, HiveSource::open(path)?)
 }
 
 fn parse_hive_source(
@@ -693,7 +729,13 @@ fn apply_logs(info: &HiveInfo, logs: &[(PathBuf, Option<(u64, usize)>)]) -> Resu
         hive_logs::Outcome::OldFormat { log, .. } => vec![log.clone()],
         other => return Err(FaramirError::TxLogApplyFailed(format!("{label}: {other:?}"))),
     };
-    let reader = HiveSource::Replayed(Cursor::new(replay.data.into_owned()));
+    // The replayed copy is all the techniques need: the on-disk bytes and the
+    // logs go before the hive is parsed, so a dirty hive costs its size once
+    // while the host is analysed, not twice.
+    let data = replay.data.into_owned();
+    drop(files);
+    drop(raw);
+    let reader = HiveSource::Replayed(Cursor::new(data));
     let hive = parse_hive_source(&info.path, &info.header, reader)?;
     Ok((hive.treat_hive_as_clean(), used))
 }

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Clean hives are memory-mapped: the Windows techniques run ten times faster on the same memory
+
+- **A clean hive is read through a memory map** (`memmap2`) instead of a buffered file. The 55 techniques seek through a hive thousands of times; through `BufReader` every seek threw the buffer away and became a system call, through the map it is a memory read. Nothing is loaded up front: the operating system brings each 4 KiB page in the first time a technique touches it and drops pages again under memory pressure, so a machine with little RAM is no worse off than before and a 500 MB SOFTWARE costs no resident memory beyond the pages in use. Measured against the 0.4.0 binary on the carving-lab VHD: live analysis 5.6 s of CPU to 0.5 s, with `--carve` 15.7 s to 1.3 s, peak working set 48 MB to 49 MB; the Linux samples do not change (no hives). The CSVs are identical byte for byte, except the rows whose `timestamp` and temporary path already changed from run to run before (startup folder, GPO script, forced extension: see the pending note in the 0.4.0 entry).
+- **A dirty hive costs its size once, not twice.** The replayed copy is all the techniques read; the on-disk bytes and the transaction logs are released before the hive is parsed, where they used to live for the whole analysis of the host.
+- When a hive cannot be mapped, **3050 `ERR_WIN_HIVE_MAP`** (warning) is recorded and the hive is read through the buffered file as before: same bytes, same result, slower. A missing or unreadable hive is still 3001.
+- Tests: `tests/test_hive_mmap.rs` (a readable hive is mapped; the map and the buffered file return the same bytes at every offset the techniques land on; the techniques find the same values through the map; an empty file maps to nothing and a missing one is an open error), 3050 in the catalogue and the dense-range check.
+
 ## 0.4.0 (2026-11-05)
 
 ### Faramir's own header: 19 columns in masstin's verticals, nothing dropped

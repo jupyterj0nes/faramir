@@ -250,3 +250,12 @@ fn test_err_trait_impl() {
     let err: Box<dyn std::error::Error> = Box::new(LinuxPersistenceError::EmptyFile("f".into()));
     assert!(!err.to_string().is_empty());
 }
+
+#[test]
+fn test_err_hive_map_failed_code() {
+    let err = faramir::errors::FaramirError::HiveMapFailed("SOFTWARE: mapping failed".into());
+    assert_eq!(err.code(), "ERR_WIN_HIVE_MAP");
+    assert_eq!(err.error_number(), 3050);
+    assert_eq!(err.severity(), faramir::errors::Severity::Warning, "a failed map degrades speed, not the result");
+    assert!(err.to_string().contains("reading it through the file"));
+}

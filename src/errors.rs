@@ -219,6 +219,8 @@ pub enum FaramirError {
     TxLogRemoteMatch(String),
     /// Dirty hive was rebuilt from transaction logs (3048)
     HiveRecovered(String),
+    /// The hive could not be memory-mapped; it is read through a buffered file instead (slower, same result).
+    HiveMapFailed(String),
     /// Browser profile or policy JSON could not be parsed (3049)
     BrowserProfileParseError(String),
 
@@ -417,6 +419,7 @@ impl FaramirError {
             Self::HiveEmptyFile(_) => "ERR_WIN_HIVE_EMPTY",
             Self::TxLogRemoteMatch(_) => "ERR_WIN_TX_LOG_REMOTE_MATCH",
             Self::HiveRecovered(_) => "ERR_WIN_HIVE_RECOVERED",
+            Self::HiveMapFailed(_) => "ERR_WIN_HIVE_MAP",
             Self::BrowserProfileParseError(_) => "ERR_WIN_BROWSER_PROFILE_PARSE",
 
             Self::CronSyntax(_) => "ERR_LNX_CRON_SYNTAX",
@@ -567,6 +570,7 @@ impl FaramirError {
             Self::HiveEmptyFile(_) => 3046,
             Self::TxLogRemoteMatch(_) => 3047,
             Self::HiveRecovered(_) => 3048,
+            Self::HiveMapFailed(_) => 3050,
             Self::BrowserProfileParseError(_) => 3049,
 
             Self::CronSyntax(_) => 4001,
@@ -624,6 +628,7 @@ impl FaramirError {
             Self::HiveDirtyNoLogs(_)
             | Self::TxLogReplayFailed(_)
             | Self::HiveChecksumInvalid(_)
+            | Self::HiveMapFailed(_)
             | Self::HiveKindUnresolved(_)
             | Self::HiveNameHeaderMismatch(_)
             | Self::TxLogNotFound(_)
@@ -793,6 +798,7 @@ impl FaramirError {
             | Self::HiveEmptyFile(s)
             | Self::TxLogRemoteMatch(s)
             | Self::HiveRecovered(s)
+            | Self::HiveMapFailed(s)
             | Self::BrowserProfileParseError(s)
             | Self::CronSyntax(s)
             | Self::CronNoUser(s)
@@ -939,6 +945,7 @@ impl FaramirError {
             Self::HiveEmptyFile(e()),
             Self::TxLogRemoteMatch(e()),
             Self::HiveRecovered(e()),
+            Self::HiveMapFailed(e()),
             Self::BrowserProfileParseError(e()),
             Self::CronSyntax(e()),
             Self::CronNoUser(e()),
@@ -1087,6 +1094,7 @@ impl fmt::Display for FaramirError {
             Self::HiveEmptyFile(p) => write!(f, "Hive file is zero bytes: {}", p),
             Self::TxLogRemoteMatch(p) => write!(f, "Transaction log found outside the hive folder, matched by header: {}", p),
             Self::HiveRecovered(p) => write!(f, "Dirty hive rebuilt from transaction logs: {}", p),
+            Self::HiveMapFailed(p) => write!(f, "Hive could not be memory-mapped, reading it through the file instead: {}", p),
             Self::BrowserProfileParseError(e) => write!(f, "Cannot parse browser profile or policy file: {}", e),
 
             Self::CronSyntax(e) => write!(f, "Cron syntax error: {}", e),
