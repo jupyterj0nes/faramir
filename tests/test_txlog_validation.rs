@@ -296,9 +296,24 @@ fn relation_stale() {
     assert_eq!(relation_to_hive(&s, &hive_header(6, 5, r"emRoot\System32\Config\SOFTWARE")), TxLogRelation::Stale);
 }
 #[test]
-fn relation_gap() {
+fn relation_log_starting_later_is_applied_by_the_format() {
+    // Starts at 9, its own base block's sequence, past the hive's 6/5: the regf specification
+    // (note 7) applies it, as Windows does with a hive copied while it was being written.
     let s = inspect(&log_with(&[entry(9, vec![(0, page(512))])])).unwrap();
+    assert_eq!(relation_to_hive(&s, &hive_header(6, 5, r"emRoot\System32\Config\SOFTWARE")), TxLogRelation::Matching);
+}
+#[test]
+fn relation_gap() {
+    // Its base block says 8 but no entry carries 8: it cannot start a recovery.
+    let mut s = inspect(&log_with(&[entry(9, vec![(0, page(512))]), entry(10, vec![(0, page(512))])])).unwrap();
+    s.header.primary_sequence = 8;
     assert_eq!(relation_to_hive(&s, &hive_header(6, 5, r"emRoot\System32\Config\SOFTWARE")), TxLogRelation::Gap);
+}
+#[test]
+fn relation_base_block_older_than_the_hive_is_stale() {
+    let mut s = inspect(&log_with(&[entry(9, vec![(0, page(512))])])).unwrap();
+    s.header.primary_sequence = 4;
+    assert_eq!(relation_to_hive(&s, &hive_header(6, 5, r"emRoot\System32\Config\SOFTWARE")), TxLogRelation::Stale);
 }
 #[test]
 fn relation_foreign_by_embedded_name() {

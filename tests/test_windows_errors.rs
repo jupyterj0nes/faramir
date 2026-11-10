@@ -131,6 +131,7 @@ fn err_hive_empty_file() {
 #[test]
 fn err_txlog_remote_match() {
     check(FaramirError::TxLogRemoteMatch("detail-marker".into()), "ERR_WIN_TX_LOG_REMOTE_MATCH", 3047, Severity::Info);
+    check(FaramirError::TxLogAhead("detail-marker".into()), "ERR_WIN_TX_LOG_AHEAD", 3051, Severity::Warning);
 }
 #[test]
 fn err_hive_recovered() {
@@ -205,7 +206,7 @@ fn catalog_windows_range_is_dense() {
     for w in nums.windows(2) {
         assert_eq!(w[1], w[0] + 1, "gap between {} and {}", w[0], w[1]);
     }
-    assert_eq!(*nums.last().unwrap(), 3050);
+    assert_eq!(*nums.last().unwrap(), 3051);
 }
 
 #[test]

@@ -217,6 +217,9 @@ pub enum FaramirError {
     HiveEmptyFile(String),
     /// Transaction log was found far from its hive; applied after header verification (3047)
     TxLogRemoteMatch(String),
+    /// A transaction log starts after the hive's own sequence, at the sequence its base block
+    /// names; applied by the format (regf specification, note 7), the writes between named (3051)
+    TxLogAhead(String),
     /// Dirty hive was rebuilt from transaction logs (3048)
     HiveRecovered(String),
     /// The hive could not be memory-mapped; it is read through a buffered file instead (slower, same result).
@@ -420,6 +423,7 @@ impl FaramirError {
             Self::ValueEmpty(_) => "ERR_WIN_VALUE_EMPTY",
             Self::HiveEmptyFile(_) => "ERR_WIN_HIVE_EMPTY",
             Self::TxLogRemoteMatch(_) => "ERR_WIN_TX_LOG_REMOTE_MATCH",
+            Self::TxLogAhead(_) => "ERR_WIN_TX_LOG_AHEAD",
             Self::HiveRecovered(_) => "ERR_WIN_HIVE_RECOVERED",
             Self::HiveMapFailed(_) => "ERR_WIN_HIVE_MAP",
             Self::BrowserProfileParseError(_) => "ERR_WIN_BROWSER_PROFILE_PARSE",
@@ -572,6 +576,7 @@ impl FaramirError {
             Self::ValueEmpty(_) => 3045,
             Self::HiveEmptyFile(_) => 3046,
             Self::TxLogRemoteMatch(_) => 3047,
+            Self::TxLogAhead(_) => 3051,
             Self::HiveRecovered(_) => 3048,
             Self::HiveMapFailed(_) => 3050,
             Self::BrowserProfileParseError(_) => 3049,
@@ -645,6 +650,7 @@ impl FaramirError {
             | Self::TxLogApplyPanic(_)
             | Self::TxLogAmbiguous(_)
             | Self::TxLogPartiallyApplied(_)
+            | Self::TxLogAhead(_)
             | Self::ControlSetNotFound(_)
             | Self::TechniquePanicked(_)
             | Self::HiveDiscoveryIoError(_)
@@ -801,6 +807,7 @@ impl FaramirError {
             | Self::ValueEmpty(s)
             | Self::HiveEmptyFile(s)
             | Self::TxLogRemoteMatch(s)
+            | Self::TxLogAhead(s)
             | Self::HiveRecovered(s)
             | Self::HiveMapFailed(s)
             | Self::BrowserProfileParseError(s)
@@ -949,6 +956,7 @@ impl FaramirError {
             Self::ValueEmpty(e()),
             Self::HiveEmptyFile(e()),
             Self::TxLogRemoteMatch(e()),
+            Self::TxLogAhead(e()),
             Self::HiveRecovered(e()),
             Self::HiveMapFailed(e()),
             Self::BrowserProfileParseError(e()),
@@ -1099,6 +1107,7 @@ impl fmt::Display for FaramirError {
             Self::ValueEmpty(p) => write!(f, "Registry value is empty: {}", p),
             Self::HiveEmptyFile(p) => write!(f, "Hive file is zero bytes: {}", p),
             Self::TxLogRemoteMatch(p) => write!(f, "Transaction log found outside the hive folder, matched by header: {}", p),
+            Self::TxLogAhead(p) => write!(f, "Transaction log starts after the hive's sequence and is applied from its own base block, as the regf specification (note 7) and Windows do; the writes between are in no log, so a page they changed and that was not written again keeps its older content: {}", p),
             Self::HiveRecovered(p) => write!(f, "Dirty hive rebuilt from transaction logs: {}", p),
             Self::HiveMapFailed(p) => write!(f, "Hive could not be memory-mapped, reading it through the file instead: {}", p),
             Self::BrowserProfileParseError(e) => write!(f, "Cannot parse browser profile or policy file: {}", e),

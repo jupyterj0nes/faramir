@@ -103,7 +103,8 @@ pub enum TxLogRelation {
     Matching,
     /// All entries are older than the hive: nothing to apply (normal for the other log).
     Stale,
-    /// First entry is ahead of the hive: cannot be applied (missing intermediate log).
+    /// No entry carries the sequence the log's own base block starts at: by the format's
+    /// rule (regf specification, note 7) it cannot start a recovery.
     Gap,
     /// Embedded hive name differs: belongs to another hive.
     Foreign,
@@ -298,12 +299,22 @@ pub fn relation_to_hive(summary: &TxLogSummary, hive: &HiveHeader) -> TxLogRelat
     if !log_name.is_empty() && !hive_name.is_empty() && !log_name.eq_ignore_ascii_case(hive_name) {
         return TxLogRelation::Foreign;
     }
+    by_the_format(summary, hive)
+}
+
+/// The rule of the regf specification (transaction log files, new format, notes 5 and 7):
+/// recovery starts at the entry whose sequence equals the primary sequence of the log's own
+/// base block, and that sequence must not be less than the hive's secondary sequence. A log
+/// whose entries are all at or before the hive's secondary sequence is already in the hive.
+/// Nothing bounds it from above: a hive copied while it was being written (a live system, a
+/// shadow copy) has logs that start later than its own sequence, and Windows applies them.
+fn by_the_format(summary: &TxLogSummary, hive: &HiveHeader) -> TxLogRelation {
+    let start = summary.header.primary_sequence;
     let last = summary.last_sequence().unwrap_or(0);
-    let first = summary.first_sequence().unwrap_or(0);
-    if last <= hive.secondary_sequence {
+    if last <= hive.secondary_sequence || start < hive.secondary_sequence {
         return TxLogRelation::Stale;
     }
-    if first > hive.secondary_sequence.wrapping_add(1) {
+    if !summary.entries.iter().any(|e| e.sequence == start) {
         return TxLogRelation::Gap;
     }
     TxLogRelation::Matching
@@ -599,13 +610,23 @@ pub fn reconcile_pair(log1: &mut Option<TxLogCandidate>, log2: &mut Option<TxLog
         }
         let Some(s) = &c.summary else { continue };
         let mine: Vec<u32> = s.entries.iter().map(|e| e.sequence).collect();
+        // Continuing the hive's own sequence, directly or through the other log, or starting
+        // where its own base block says (the format's rule): either way it is replayed.
         let relation = if mine.iter().any(|q| reachable.contains(q)) {
             TxLogRelation::Matching
-        } else if mine.iter().all(|q| *q <= hive.secondary_sequence) {
-            TxLogRelation::Stale
         } else {
-            TxLogRelation::Gap
+            by_the_format(s, hive)
         };
+        if relation == TxLogRelation::Matching && !mine.iter().any(|q| reachable.contains(q)) {
+            diag::record(FaramirError::TxLogAhead(format!(
+                "{}: starts at {} (its base block), the hive's secondary sequence is {}; writes {} to {} are in no log",
+                c.path.display(),
+                s.header.primary_sequence,
+                hive.secondary_sequence,
+                hive.secondary_sequence.wrapping_add(1),
+                s.header.primary_sequence.wrapping_sub(1)
+            )));
+        }
         c.relation = Some(relation);
     }
 }
@@ -619,9 +640,9 @@ pub fn locate_transaction_logs(hive: &HiveInfo) -> TxLogSelection {
     for c in [log1.as_ref(), log2.as_ref()].into_iter().flatten() {
         if c.relation == Some(TxLogRelation::Gap) {
             diag::record(FaramirError::TxLogSequenceMismatch(format!(
-                "{}: first entry {} is ahead of hive secondary sequence {} (intermediate log missing)",
+                "{}: no entry at {}, the sequence its own base block starts at (hive secondary sequence {}): it cannot start a recovery",
                 c.path.display(),
-                c.summary.as_ref().and_then(|s| s.first_sequence()).unwrap_or(0),
+                c.summary.as_ref().map(|s| s.header.primary_sequence).unwrap_or(0),
                 hive.header.secondary_sequence
             )));
         }

@@ -313,15 +313,36 @@ fn stale_logs_only_leave_hive_dirty_with_warning() {
 }
 
 #[test]
-fn gap_log_is_not_applied() {
-    let d = TempDir::new("loc_gap");
+fn log_starting_later_is_applied_by_the_format() {
+    // The hive says 6/5, the log starts at 21 (its own base block) with entry 21: the regf
+    // specification (note 7) starts recovery there, as Windows does with a hive copied while
+    // it was being written. Applied, and the writes 6 to 20 that no log holds are named.
+    let d = TempDir::new("loc_ahead");
     let base = HiveBuilder::software();
     let mut step = HiveBuilder::software();
     step.sz(RUN, "Marker", r"C:\m.exe");
     let fx = build_dirty(&base, &[&step], 20, false); // entry seq 21
     let hive = d.write("SOFTWARE", &HiveBuilder::software().build_with(6, 5));
-    let _ = fx.primary;
     d.write("SOFTWARE.LOG1", &fx.log1);
+    diag::clear();
+    clear_log_index();
+    let o = open_hive_path(&hive).unwrap();
+    assert!(o.recovery.logs_applied);
+    assert!(diag::has("ERR_WIN_TX_LOG_AHEAD"));
+}
+
+#[test]
+fn gap_log_is_not_applied() {
+    // The same log with its base block saying 19: no entry carries 19, so it cannot start.
+    let d = TempDir::new("loc_gap");
+    let base = HiveBuilder::software();
+    let mut step = HiveBuilder::software();
+    step.sz(RUN, "Marker", r"C:\m.exe");
+    let fx = build_dirty(&base, &[&step], 20, false); // entry seq 21
+    let mut log = fx.log1.clone();
+    patch_base_block(&mut log[..512], 19, 19, 6);
+    let hive = d.write("SOFTWARE", &HiveBuilder::software().build_with(6, 5));
+    d.write("SOFTWARE.LOG1", &log);
     diag::clear();
     clear_log_index();
     let o = open_hive_path(&hive).unwrap();
@@ -430,7 +451,7 @@ fn reconcile_pair_links_log1_and_log2_sequences() {
     let hive = faramir::windows::hives::HiveHeader::parse(&fx.primary, "h").unwrap();
     let l1 = inspect_transaction_log_bytes(std::path::Path::new("1"), &fx.log1).unwrap();
     let l2 = inspect_transaction_log_bytes(std::path::Path::new("2"), fx.log2.as_ref().unwrap()).unwrap();
-    assert_eq!(relation_to_hive(&l2, &hive), TxLogRelation::Gap, "alone, LOG2 looks like a gap");
+    assert_eq!(relation_to_hive(&l2, &hive), TxLogRelation::Matching, "alone, LOG2 starts at its own base block's sequence: applicable by the format");
     let mut c1 = Some(TxLogCandidate { path: "1".into(), slot: TxLogSlot::Log1, same_directory: true, score: 0, relation: Some(relation_to_hive(&l1, &hive)), summary: Some(l1) });
     let mut c2 = Some(TxLogCandidate { path: "2".into(), slot: TxLogSlot::Log2, same_directory: true, score: 0, relation: Some(TxLogRelation::Gap), summary: Some(l2) });
     reconcile_pair(&mut c1, &mut c2, &hive);
