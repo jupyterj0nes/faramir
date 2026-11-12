@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 (2026-11-12)
+
+- **Transaction logs are applied by the regf specification's rule** (new format, note 7): recovery starts at the log entry whose sequence equals the log's own base block primary sequence, when that is not less than the hive's secondary sequence, with no upper bound. A hive copied while it was being written (a live system, a shadow copy) had its logs refused as a gap, so every change of the last hour was missing. On the 2026-11-10 RangeForge lab the planted Run value `Updater` in SOFTWARE (hive 1126/1125, logs from 1133 and 1144) is now found.
+- New **3051 `ERR_WIN_TX_LOG_AHEAD`** (warning) names the writes no log holds; a gap now means a log whose entries miss its own start.
+- Tests: a log starting later is applied, one missing its own start is not, a base block older than the hive is stale.
+
 ## 0.5.1 (2026-11-09)
 
 - **`--jobs` defaults to every thread the system gives the process**, not four: `std::thread::available_parallelism`, which honours affinity masks and container quotas, and never more workers than targets. The cap of four was a guess at a memory budget that cannot be known before a host is opened (a worker costs the replayed dirty hives of its host while it is on it), so it was holding a 16-core machine with 32 GB to four workers; the knob for a machine short of RAM, or reading several images from one mechanical disk, is `--jobs N`. The CSV does not depend on the number. Tests: `src/jobs.rs` (the default is the parallelism reported), `tests/test_jobs_cli.rs` (the workers line names it).
