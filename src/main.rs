@@ -131,7 +131,7 @@ impl Action {
 #[derive(Parser, Debug)]
 #[command(
     name = "faramir",
-    version = "0.5.1",
+    version,
     about = "Forensic persistence hunting tool for Windows and Linux triage, images (E01/RAW/ZIP) and offline filesystems"
 )]
 struct Args {

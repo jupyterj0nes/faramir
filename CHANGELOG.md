@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3 (2026-11-12)
+
+- `--version` prints the crate's version: it was written by hand in `src/main.rs` and the 0.5.2 binaries still said 0.5.1.
+
 ## 0.5.2 (2026-11-12)
 
 - **Transaction logs are applied by the regf specification's rule** (new format, note 7): recovery starts at the log entry whose sequence equals the log's own base block primary sequence, when that is not less than the hive's secondary sequence, with no upper bound. A hive copied while it was being written (a live system, a shadow copy) had its logs refused as a gap, so every change of the last hour was missing. On the 2026-11-10 RangeForge lab the planted Run value `Updater` in SOFTWARE (hive 1126/1125, logs from 1133 and 1144) is now found.
