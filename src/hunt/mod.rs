@@ -125,8 +125,8 @@ impl Verdict {
     }
 }
 
-/// Rarity in masstin's unit: −10·log10(q). 0 for q ≥ 1, 100 for q ≤ 0.
-/// Ten points are one order of magnitude.
+/// Rarity in the unit of the four tools: −10·log10 of a probability. 0 for
+/// 1 or more, 100 for 0 or less. Ten points are one order of magnitude.
 pub fn rarity_points(q: f64) -> f64 {
     if q.is_nan() || q >= 1.0 {
         0.0
@@ -144,14 +144,31 @@ pub struct Evidence {
     /// row's system ([`measured::points`]), summed.
     pub rule_points: u32,
     pub tested: bool,
-    pub q: f64,
+    /// The test's p-value: the share of the technique's reference rows
+    /// that are at least as unusual (add-one corrected). The rarity of the
+    /// row, in the sense a rule's points are: the share of normal rows
+    /// that show at least this.
+    pub p: f64,
 }
 
-/// `hunt_score`, masstin's definition: −10·log10 of how rare the row is,
-/// rounded, 0 to 100. The statistical test gives its q-value; every rule
-/// that fired adds the rarity measured for it on clean rows of the row's
-/// system ([`measured`]), since independent evidence adds in log space. A
-/// reference row (`habitual`, `baseline`) is 0: p = 1, not judged.
+/// `hunt_score`, the definition of the four tools: −10·log10 of how rare
+/// the row is, rounded, 0 to 100. Every contribution is the same quantity,
+/// the share of normal rows that show at least this:
+///
+/// * the statistical test gives it measured on the run: its p-value, the
+///   share of the technique's reference rows at least as unusual. Not its
+///   q-value: that one is corrected for every row put to the test and
+///   decides `significant`; it is not a rarity, and a score made of it sat
+///   an order of magnitude below a rule that says the same thing;
+/// * every rule that fired gives it measured on clean rows of the row's
+///   system ([`measured`]); rules add, as independent evidence does in
+///   log space.
+///
+/// The test and the rules of a row are NOT added: a test that finds the
+/// folder or the name of an entry rare and a rule that fires on that
+/// folder or that name read the same fact twice. The row takes the
+/// stronger of the two, which holds whatever their dependence. A reference
+/// row (`habitual`, `baseline`) is 0: p = 1, not judged.
 ///
 /// Read as masstin reads it: 0 no rarer than chance, 13 one in twenty (the
 /// default alpha), 20 one in a hundred, 29 a rule that never fired on the
@@ -161,8 +178,8 @@ pub fn score_for(hunt: Hunt, e: &Evidence) -> u8 {
     match hunt {
         Hunt::Habitual | Hunt::Baseline | Hunt::None => 0,
         _ => {
-            let stat = if e.tested { rarity_points(e.q) } else { 0.0 };
-            (stat + e.rule_points as f64).round().clamp(0.0, 100.0) as u8
+            let stat = if e.tested { rarity_points(e.p) } else { 0.0 };
+            stat.max(e.rule_points as f64).round().clamp(0.0, 100.0) as u8
         }
     }
 }
@@ -367,7 +384,7 @@ pub fn evaluate(events: &[Event], settings: &HuntSettings) -> (Vec<Verdict>, Hun
         };
 
         ev.tested = st.tested;
-        ev.q = st.q;
+        ev.p = st.p;
         if st.significant {
             let mut detail: Vec<String> = Vec::new();
             if let Some((h, n)) = st.fleet {
@@ -553,8 +570,8 @@ mod tests {
 
     #[test]
     fn score_is_masstins_rarity_plus_the_rules() {
-        let e = |rule_points, tested, q| Evidence { rule_points, tested, q };
-        // the statistics alone, exactly masstin's number
+        let e = |rule_points, tested, p| Evidence { rule_points, tested, p };
+        // the statistics alone: the rarity the test measured
         assert_eq!(score_for(Hunt::Significant, &e(0, true, 0.05)), 13);
         assert_eq!(score_for(Hunt::Significant, &e(0, true, 0.001)), 30);
         assert_eq!(score_for(Hunt::Significant, &e(0, true, 1e-6)), 60);
@@ -567,16 +584,19 @@ mod tests {
         assert_eq!(score_for(Hunt::Candidate, &e(24, false, 1.0)), 24);
         assert_eq!(score_for(Hunt::Candidate, &e(10, false, 1.0)), 10);
         assert_eq!(score_for(Hunt::NotEvaluated, &e(10, false, 1.0)), 10);
-        // both add, in log space, and cap at 100
-        assert_eq!(score_for(Hunt::Significant, &e(90, true, 0.05)), 100);
+        // rules add among themselves and cap at 100; the test and the rules
+        // do not add: the stronger of the two
+        assert_eq!(score_for(Hunt::Significant, &e(90, true, 0.05)), 90);
         assert_eq!(score_for(Hunt::Significant, &e(90 + 20 + 10, false, 1.0)), 100);
-        assert_eq!(score_for(Hunt::Candidate, &e(20 + 10, true, 0.1)), 40);
-        assert_eq!(score_for(Hunt::Significant, &e(10, true, 0.01)), 30);
+        assert_eq!(score_for(Hunt::Candidate, &e(20 + 10, true, 0.1)), 30);
+        assert_eq!(score_for(Hunt::Significant, &e(10, true, 0.01)), 20);
+        assert_eq!(score_for(Hunt::Significant, &e(33, true, 0.001)), 33);
+        assert_eq!(score_for(Hunt::Significant, &e(21, true, 0.0005)), 33);
         // reference rows are 0 whatever fired
         for h in [Hunt::Habitual, Hunt::Baseline, Hunt::None] {
             assert_eq!(score_for(h, &e(90, true, 0.001)), 0, "{h:?}");
         }
-        // a rule's points survive a test with q = 1
+        // a rule's points survive a test that finds nothing
         assert_eq!(score_for(Hunt::Significant, &e(29, true, 1.0)), 29);
         assert_eq!(score_for(Hunt::Candidate, &e(24, true, 1.0)), 24);
     }
@@ -686,8 +706,10 @@ mod tests {
         // one low rule (random name) is not enough for suspicious; the statistics make it significant
         assert_eq!(last.hunt, Hunt::Significant, "{:?}", last);
         let low = measured::points("H3013", Os::Windows) as f64;
-        assert!(last.score as f64 >= low + 13.0, "one low rule ({low}) and q <= alpha (13 or more): {:?}", last);
-        assert_eq!(last.score as f64, (rarity_points(last.q.unwrap()) + low).round(), "{:?}", last);
+        // 1,200 reference rows and none as unusual: one in 1,201, 31 points,
+        // more than the low rule's own
+        assert!(last.score as f64 >= low, "at least the low rule ({low}): {:?}", last);
+        assert!(last.score >= 30, "the test's rarity, one in the reference: {:?}", last);
         assert!(last.q.is_some_and(|q| q <= 0.05), "{:?}", last);
         assert!(last.reasons[0].starts_with("rule H3013 (low): "), "the rule's clause first: {:?}", last.reasons);
         assert!(last.reasons[1].starts_with("rare among "), "then the test's, in words: {:?}", last.reasons);

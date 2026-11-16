@@ -2,8 +2,10 @@
 //! reference rows, the convention of the four tools (masstin
 //! `docs/csv-format.md`, "The same tail in caarea, faramir and allymacb").
 //!
-//! `hunt_score` is `-10 · log10` of a probability, 0 to 100. The statistical
-//! test contributes `-10 · log10(q)`. A rule contributes the same scale
+//! `hunt_score` is `-10 · log10` of a probability, 0 to 100: the share of
+//! normal rows that show at least this. The statistical test measures it on
+//! the run (its p-value against the technique's reference rows, never its
+//! q-value). A rule contributes the same quantity
 //! **measured, not chosen**: the share of clean reference rows of the row's
 //! system its pattern fires on, `-10 · log10(hits / rows)`. A pattern that
 //! never fired is not "never": the corpus bounds what it can say, so it gets

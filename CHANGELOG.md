@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **`hunt_score` is one quantity in the four tools: the share of normal rows that show at least this.** The statistical test contributed `−10·log10(q)`, and the q-value is not that quantity: it is corrected for every row put to the test, so a tested row read an order of magnitude lower than a rule that said the same thing, and in a timeline that mixes the tools the tests' findings sat under the rules' noise. The test now contributes its p-value, the share of the technique's reference rows at least as unusual, which is what a rule's points are on its clean reference. `significant` is still decided on q. The test and the rules of a row no longer add (they often read the same fact, a rare folder or name): the row takes the stronger of the two; rules still add among themselves. On a lab triage with `--baseline`, one row moves from 10 to 19 and no state changes. masstin `docs/csv-format.md` has the convention.
+
 ## 0.5.3 (2026-11-12)
 
 - `--version` prints the crate's version: it was written by hand in `src/main.rs` and the 0.5.2 binaries still said 0.5.1.
