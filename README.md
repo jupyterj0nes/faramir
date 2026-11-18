@@ -29,7 +29,7 @@ It is the Rust successor of [Boromir](https://github.com/Alexgpsec/Persistence_B
 
 ## Features
 
-- **Reads the evidence itself.** E01, raw, VMDK, VHD/VHDX images with NTFS, ext4 or XFS volumes (plain or LVM), KAPE, Velociraptor, Cortex XDR, CyLR and UAC packages, nested archives, mounted volumes or a single hive. No mounting, no manual extraction.
+- **Reads the evidence itself.** E01, raw, VMDK, VHD/VHDX images with NTFS, ext4 or XFS volumes (plain or LVM), KAPE, Velociraptor, Cortex XDR (the offline collector's package and the online triage downloaded from the console), CyLR and UAC packages, nested archives, mounted volumes or a single hive. No mounting, no manual extraction.
 - **Rebuilds dirty hives.** Finds `.LOG1`/`.LOG2` wherever the collector left them, checks they belong to the hive, validates every entry and replays them, Windows 7 / 8 logs (old `DIRT` format) included. Verified byte for byte against `rla.exe`, and against the hive Windows 7 recovered itself.
 - **52 Windows techniques**, each read from the hive it lives in: HKLM `SOFTWARE`/`SYSTEM`, every `NTUSER.DAT`, `DEFAULT` and `UsrClass.dat`, including `Wow6432Node` variants.
 - **Linux persistence**: cron, systemd, shell profiles, SSH, sudoers, PAM, udev, kernel modules, package hooks, `ld.so.preload` and live-process anomalies.
@@ -112,7 +112,8 @@ faramir -f /cases/FS02.vhdx -o fs02.csv             # dynamic VHDX
 ```bash
 faramir -f /cases/triage/WS01_20261028_120000.zip -o ws01.csv                                       # KAPE
 faramir -f /cases/triage/Collection-SRV-DC01-2026-10-28T12_00_00Z.zip -o dc01.csv                   # Velociraptor
-faramir -f /cases/triage/offline_collector_output_WS01_2026-10-28_12-00-00.zip -o ws01.csv          # Cortex XDR
+faramir -f /cases/triage/offline_collector_output_WS01_2026-10-28_12-00-00.zip -o ws01.csv          # Cortex XDR offline collector
+faramir -d /cases/cortex-online/ -o hosts.csv                                                      # Cortex XDR online triages, one zip per host
 faramir -f /cases/triage/uac-web01-linux-20261028120000.tar.gz -o web01.csv                         # UAC (Linux)
 ```
 
@@ -178,6 +179,7 @@ faramir -f /cases/WS01.mem -o ws01_memory.csv --carve
 | `.vhd` `.vhdx` | Fixed and dynamic. Differencing disks are reported as incomplete. |
 | `.zip` `.tar` `.tar.gz` `.tgz` | Only forensic artifacts are extracted. Nested archives are expanded in place. Encrypted zips are tried with the usual forensic passwords. |
 | KAPE, Velociraptor, Cortex XDR, CyLR, UAC | Detected from their markers; the host name comes from the package. |
+| Cortex XDR online triage | The zip the console offers for download after a triage: one folder per collector, a table (`.csv`) or the collector's raw files in a zip named after it (`cron_files/cron_files_<id>_<id>.zip`). Recognised by that layout, whatever the download is called. Each raw file is put back at the path its collector's `manifest.json` gives (`entry_1_0/crontab` becomes `/etc/crontab`), so the package is read as the tree of the host: one host per package, named by the `host_name` column of its tables, each finding cited by its real path. A file takes the modification time the triage's own listing (`bodyfile/bodyfile.csv`) has for it; one the listing does not name is dated when it was unpacked. The tables themselves are not read. Tested on Linux packages. |
 | Directory | Mounted volume or already-extracted collection, Windows or Linux. |
 | Browser profiles | From images and packages: Chromium-family `Preferences`, `Secure Preferences` and extension manifests, Firefox `extensions.json`, enterprise policy files; caches are never copied. Linux: `~/.config/<browser>`, `~/.mozilla/firefox`, snap and flatpak paths, `/etc/*/policies/managed`. |
 | Single file | A hive (with its logs beside it), a systemd unit, a crontab, a shell profile. With `--carve`, any other file is scanned for hives (pagefile, hiberfil, memory dump, unallocated-space dump). |
