@@ -97,7 +97,7 @@ fn files_under(root: &Path) -> Vec<String> {
     let mut out: Vec<String> = walkdir::WalkDir::new(root)
         .into_iter()
         .flatten()
-        .filter(|e| e.path().is_file())
+        .filter(|e| e.path().is_file() && e.file_name() != faramir::parsers::linux::UNDATED_MARKER)
         .map(|e| e.path().strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/"))
         .collect();
     out.sort();
@@ -155,6 +155,10 @@ fn the_files_go_back_to_their_path_on_the_host() {
             "systemd_units/entry_9_0/orphan.service",
         ]
     );
+    // the files the listing gives no time for
+    let mut undated: Vec<String> = std::fs::read_to_string(out.join(faramir::parsers::linux::UNDATED_MARKER)).unwrap().lines().map(str::to_string).collect();
+    undated.sort();
+    assert_eq!(undated, vec!["/etc/cron.d/backup", "/etc/systemd/system/updater.service", "/outside/evil.service", "/systemd_units/entry_9_0/orphan.service"]);
     assert_eq!((placed, loose), (5, 1));
     // nothing of the collector's own report, and nothing outside the folder
     assert!(!files.iter().any(|f| f.ends_with("manifest.json") || f.ends_with("stdout.txt") || f.ends_with("script_output.txt")));
@@ -198,6 +202,12 @@ fn the_whole_package_is_one_evidence_root_and_one_host() {
     // and it is dated by the host's file, not by the unpacking
     let job = cron.iter().find(|e| e.source_file == "/etc/crontab").unwrap();
     assert!(job.timestamp.starts_with("2024-03-01"), "{}", job.timestamp);
+    // a file the listing does not name: its findings carry no time, not the moment of the unpacking
+    let undated = cron.iter().find(|e| e.source_file == "/etc/cron.d/backup").unwrap();
+    assert_eq!(undated.timestamp, "");
+    let unit = events.iter().find(|e| e.source_file == "/etc/systemd/system/updater.service").unwrap();
+    assert_eq!(unit.timestamp, "");
+    assert!(events.iter().all(|e| !e.timestamp.starts_with(&chrono::Utc::now().format("%Y-%m-%d").to_string())), "no finding dated today");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

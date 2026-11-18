@@ -202,6 +202,12 @@ pub fn process_recovered(dir: &Path, computer_name: &str) -> Vec<Event> {
     dedupe_events(out)
 }
 
+/// At the root of a staged evidence tree: the files (one per line, as they
+/// are cited: `/etc/cron.d/backup`) whose modification time on the host is
+/// not known, because the package they came in carries none for them. The
+/// time such a file has on disk is the moment it was unpacked.
+pub const UNDATED_MARKER: &str = ".faramir_undated";
+
 /// Recursively scans and extracts Linux persistence events from target directory or file
 pub fn process_linux_target(target: &Path, computer_name: &str) -> Vec<Event> {
     let mut events = Vec::new();
@@ -224,6 +230,17 @@ pub fn process_linux_target(target: &Path, computer_name: &str) -> Vec<Event> {
     }
 
     EVIDENCE_ROOT.with(|r| *r.borrow_mut() = None);
+    // a finding from a file whose time on the host is unknown carries no time
+    if target.is_dir() {
+        if let Ok(list) = std::fs::read_to_string(target.join(UNDATED_MARKER)) {
+            let undated: std::collections::HashSet<&str> = list.lines().collect();
+            for e in &mut events {
+                if undated.contains(e.source_file.as_str()) {
+                    e.timestamp.clear();
+                }
+            }
+        }
+    }
     dedupe_events(events)
 }
 
