@@ -139,7 +139,7 @@ struct Args {
     #[arg(short = 'd', long = "directory", value_name = "DIR")]
     directory: Vec<String>,
 
-    /// Individual files to process (disk images: .E01, .raw, .dd; archives: .zip, .tar.gz; hives)
+    /// Individual files to process (disk images: .E01, .raw, .dd, .vmdk, .vhd(x), or any file whose content is a disk image, such as a cloud snapshot with no extension; archives: .zip, .tar.gz; hives)
     #[arg(short = 'f', long = "file", value_name = "FILE")]
     file: Vec<String>,
 
@@ -568,7 +568,7 @@ fn main() -> Result<()> {
     };
 
     if !args.silent {
-        println!("⚔️  Faramir v0.5.0 - DFIR Persistence Hunting Tool");
+        println!("⚔️  Faramir v{} - DFIR Persistence Hunting Tool", env!("CARGO_PKG_VERSION"));
         println!("==================================================");
     }
 

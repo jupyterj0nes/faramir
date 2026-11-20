@@ -90,9 +90,116 @@ pub fn is_primary_image_segment(path: &Path) -> bool {
     false
 }
 
-/// Checks if a file path is a supported forensic disk image (first segment only).
+/// Checks if a file path is a supported forensic disk image (first segment
+/// only): by its name, or, for a file whose name is not an image name (no
+/// extension, as cloud snapshots come, or another one), by its content.
 pub fn is_supported_image(path: &Path) -> bool {
-    is_primary_image_segment(path)
+    is_primary_image_segment(path) || (!is_image_file(path) && sniff_image_kind(path).is_some())
+}
+
+/// What a disk image is, as far as the readers go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageKind {
+    /// EnCase / Expert Witness (`.E01`, `.Ex01`)
+    Ewf,
+    /// VMware virtual disk (descriptor or monolithic sparse extent)
+    Vmdk,
+    /// Microsoft virtual disk, VHD (fixed, dynamic, differencing) or VHDX
+    Vhd,
+    /// A plain byte-for-byte copy of a disk or a volume
+    Raw,
+}
+
+/// Smallest file the content check considers: no disk or volume is smaller.
+pub const SNIFF_MIN_SIZE: u64 = 64 * 1024;
+
+/// The kind of disk image the first 4 KiB and the last 512 bytes of a file
+/// show, whatever the file is called. `None` when nothing says disk image.
+///
+/// Container formats by their magic: EWF (`EVF`), VHDX (`vhdxfile`), VHD
+/// (`conectix` at the start for dynamic disks, at the end for fixed ones, as
+/// Azure and Hyper-V export them), VMDK sparse (`KDMV`). A raw copy by what a
+/// disk or a volume starts with: a GPT header, an MBR with a valid partition
+/// entry, an NTFS boot sector, an ext2/3/4 superblock, an XFS superblock or an
+/// LVM label.
+pub fn image_kind_from_bytes(head: &[u8], tail: &[u8]) -> Option<ImageKind> {
+    if head.len() < 4096 {
+        return None;
+    }
+    if head.starts_with(b"EVF\x09\x0d\x0a\xff\x00") || head.starts_with(b"EVF2\x0d\x0a\x81\x00") {
+        return Some(ImageKind::Ewf);
+    }
+    if head.starts_with(b"vhdxfile") || head.starts_with(b"conectix") || tail.starts_with(b"conectix") {
+        return Some(ImageKind::Vhd);
+    }
+    if head.starts_with(b"KDMV") {
+        return Some(ImageKind::Vmdk);
+    }
+    let boot_signature = head[510] == 0x55 && head[511] == 0xAA;
+    if boot_signature && &head[512..520] == b"EFI PART" {
+        return Some(ImageKind::Raw);
+    }
+    if boot_signature {
+        let valid_entry = (0..4).any(|i| {
+            let e = &head[446 + 16 * i..446 + 16 * (i + 1)];
+            let start = u32::from_le_bytes([e[8], e[9], e[10], e[11]]);
+            let sectors = u32::from_le_bytes([e[12], e[13], e[14], e[15]]);
+            (e[0] == 0x00 || e[0] == 0x80) && e[4] != 0 && start != 0 && sectors != 0
+        });
+        if valid_entry {
+            return Some(ImageKind::Raw);
+        }
+    }
+    if &head[3..11] == NTFS_SIGNATURE {
+        return Some(ImageKind::Raw);
+    }
+    if head[1080] == 0x53 && head[1081] == 0xEF {
+        return Some(ImageKind::Raw);
+    }
+    if head.starts_with(b"XFSB") || &head[512..520] == b"LABELONE" {
+        return Some(ImageKind::Raw);
+    }
+    None
+}
+
+/// [`image_kind_from_bytes`] on a file. Files under [`SNIFF_MIN_SIZE`] and
+/// files that cannot be read are not disk images.
+pub fn sniff_image_kind(path: &Path) -> Option<ImageKind> {
+    let meta = fs::metadata(path).ok()?;
+    if !meta.is_file() || meta.len() < SNIFF_MIN_SIZE {
+        return None;
+    }
+    let mut f = File::open(path).ok()?;
+    let mut head = vec![0u8; 4096];
+    f.read_exact(&mut head).ok()?;
+    let mut tail = vec![0u8; 512];
+    f.seek(SeekFrom::End(-512)).ok()?;
+    f.read_exact(&mut tail).ok()?;
+    image_kind_from_bytes(&head, &tail)
+}
+
+/// The reader to open an image with: its content when the content names a
+/// container format, else its name, else a raw copy. A `.vhd` that is a plain
+/// raw disk opens as raw; a fixed VHD named `.dd`, or with no extension at
+/// all, opens as a VHD.
+pub fn image_kind(path: &Path) -> ImageKind {
+    let sniffed = sniff_image_kind(path);
+    if let Some(k @ (ImageKind::Ewf | ImageKind::Vhd | ImageKind::Vmdk)) = sniffed {
+        return k;
+    }
+    if sniffed == Some(ImageKind::Raw) {
+        return ImageKind::Raw;
+    }
+    let lower = path.to_string_lossy().to_lowercase();
+    if lower.ends_with(".e01") || lower.ends_with(".ex01") {
+        ImageKind::Ewf
+    } else if lower.ends_with(".vmdk") {
+        ImageKind::Vmdk
+    } else if lower.ends_with(".vhd") || lower.ends_with(".vhdx") {
+        ImageKind::Vhd
+    } else {
+        ImageKind::Raw
+    }
 }
 
 /// `true` when the file is part of an image set but not its first segment.
@@ -669,11 +776,11 @@ pub fn unpack_disk_image(
     fs::create_dir_all(&out_dir)?;
 
     let path_str = image_path.to_string_lossy().to_string();
-    let lower = path_str.to_lowercase();
+    let kind = image_kind(image_path);
 
     log_message(silent, &format!("💿 Opening forensic disk image: {}", image_path.display()));
 
-    if lower.ends_with(".e01") || lower.ends_with(".ex01") {
+    if kind == ImageKind::Ewf {
         let ewf_reader = ewf::EwfReader::open(&path_str)
             .map_err(|e| crate::errors::FaramirError::EwfInitFailed(format!("{}: {e}", image_path.display())).to_string())?;
         let total_size = ewf_reader.total_size();
@@ -684,7 +791,7 @@ pub fn unpack_disk_image(
 
         let buf_reader = BufReader::new(ewf_reader);
         process_seekable_image(buf_reader, total_size, &out_dir, silent)?;
-    } else if lower.ends_with(".vmdk") {
+    } else if kind == ImageKind::Vmdk {
         let reader = super::vmdk::VmdkReader::open(&path_str).map_err(|e| {
             let msg = format!("{}: {e}", image_path.display());
             if e.contains("Incomplete VMDK") || e.contains("truncated") {
@@ -700,7 +807,7 @@ pub fn unpack_disk_image(
         );
         let buf_reader = BufReader::new(reader);
         process_seekable_image(buf_reader, total_size, &out_dir, silent)?;
-    } else if lower.ends_with(".vhd") || lower.ends_with(".vhdx") {
+    } else if kind == ImageKind::Vhd {
         let (reader, total_size) = super::vhd::open_virtual_disk(&path_str).map_err(|e| {
             let msg = format!("{}: {e}", image_path.display());
             if e.contains("differencing") {

@@ -173,6 +173,7 @@ faramir -f /cases/WS01.mem -o ws01_memory.csv --carve
 |---|---|
 | `.E01` / `.Ex01` | EWF reader, file systems parsed in place. MBR and GPT partitions; every partition is identified by its signature, not its type code. |
 | `.dd` `.raw` `.img` `.001` | Raw and split-raw images, whole disks or single volumes. |
+| Any other name | A disk image with no extension, or with one that is not an image's (a cloud snapshot such as an Azure OS disk export, `snap-<host>_os_disk-<date>`), is recognised by its content: EWF, VHD, VHDX and VMDK by their magic, a raw copy by its GPT, its MBR or the file system it starts with. The content also decides the reader: a fixed VHD named `.dd` is read as a VHD, a raw disk named `.vhd` as raw. |
 | NTFS volumes | Registry, user hives, tasks and event logs extracted; BitLocker volumes reported and skipped; every Volume Shadow Copy extracted and diffed against the live volume. |
 | Linux volumes | ext2/ext3/ext4 and XFS (v4 and v5), as a partition or as a linear LVM logical volume (any VG, any number of LVs, one PV). The persistence surface is copied out as a root tree; usr-merged `/lib` is read once. ext4 volumes also give back deleted and rewritten files through the journal. btrfs, F2FS and LUKS volumes are recognised and reported, not read. |
 | `.vmdk` | Monolithic or split, sparse or flat, streamOptimized (compressed). Snapshots, `-flat` and `-sNNN` extents are read through their descriptor. |

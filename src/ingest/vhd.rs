@@ -362,7 +362,15 @@ impl<T: Read + Seek + Send> ReadSeek for T {}
 /// Open a `.vhd` or `.vhdx` by extension as a boxed `Read + Seek` with its virtual size.
 pub fn open_virtual_disk(path: &str) -> Result<(Box<dyn ReadSeek>, u64), String> {
     let ext = Path::new(path).extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).unwrap_or_default();
-    if ext == "vhdx" {
+    // the magic decides, so a VHDX with another name or none opens as one;
+    // the name only for a file whose first bytes cannot be read
+    let mut magic = [0u8; 8];
+    let head = std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut magic)).ok().map(|_| magic);
+    let is_vhdx = match head {
+        Some(m) => &m == b"vhdxfile" || (ext == "vhdx" && &m != b"conectix"),
+        None => ext == "vhdx",
+    };
+    if is_vhdx {
         let r = VhdxReader::open(path)?;
         let n = r.total_size();
         Ok((Box::new(r), n))

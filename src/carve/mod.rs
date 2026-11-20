@@ -51,14 +51,20 @@ impl CarveReport {
     }
 }
 
-/// Open a disk image or plain file as a block source, by extension. A raw
+/// Open a disk image or plain file as a block source, by content and name. A raw
 /// device (`\\.\PhysicalDrive0`, `/dev/sdb`) is read unbuffered so every
 /// request stays sector aligned.
 pub fn open_source(path: &Path) -> Result<Box<dyn BlockSource>, FaramirError> {
     let label = path.display().to_string();
     let lower = label.to_lowercase();
     let fail = |e: String| FaramirError::CarveOpenFailed(format!("{label}: {e}"));
-    if lower.ends_with(".e01") || lower.ends_with(".ex01") {
+    // a device has no length to sniff; anything else opens by what it holds
+    let kind = if lower.starts_with(r"\\.\") || lower.starts_with("/dev/") {
+        crate::ingest::image::ImageKind::Raw
+    } else {
+        crate::ingest::image::image_kind(path)
+    };
+    if kind == crate::ingest::image::ImageKind::Ewf {
         let reader = ewf::EwfReader::open(path).map_err(|e| fail(e.to_string()))?;
         let size = reader.total_size();
         let reopen_path = path.to_path_buf();
@@ -67,12 +73,12 @@ pub fn open_source(path: &Path) -> Result<Box<dyn BlockSource>, FaramirError> {
         });
         return Ok(Box::new(src));
     }
-    if lower.ends_with(".vmdk") {
+    if kind == crate::ingest::image::ImageKind::Vmdk {
         let reader = crate::ingest::vmdk::VmdkReader::open(&label).map_err(fail)?;
         let size = reader.total_size();
         return Ok(Box::new(DirectSource::new(reader, size, label)));
     }
-    if lower.ends_with(".vhd") || lower.ends_with(".vhdx") {
+    if kind == crate::ingest::image::ImageKind::Vhd {
         let (reader, size) = crate::ingest::vhd::open_virtual_disk(&label).map_err(fail)?;
         return Ok(Box::new(DirectSource::new(reader, size, label)));
     }
