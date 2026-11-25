@@ -41,13 +41,13 @@ pub fn is_image_file(path: &Path) -> bool {
         None => return false,
     };
     let Some((_, ext)) = filename.rsplit_once('.') else { return false };
-    matches!(ext, "e01" | "ex01" | "vmdk" | "vhd" | "vhdx" | "dd" | "raw" | "img")
+    matches!(ext, "e01" | "ex01" | "vmdk" | "vhd" | "vhdx" | "qcow2" | "qcow" | "dd" | "raw" | "img")
         || is_ewf_segment_ext(ext)
         || (ext.len() == 3 && ext.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// Is this the FIRST segment of an image set, the one to feed the pipeline?
-/// `.E01` / `.Ex01`, the VMDK descriptor, `.vhd(x)`, `.dd/.raw/.img`, `.001`.
+/// `.E01` / `.Ex01`, the VMDK descriptor, `.vhd(x)`, `.qcow2`, `.dd/.raw/.img`, `.001`.
 /// Secondary EWF segments, VMDK `-flat` / `-ctk` / `-sNNN` extents, VMware
 /// snapshots (`-000001.vmdk`) and split-raw continuations (`.002`…) are not.
 pub fn is_primary_image_segment(path: &Path) -> bool {
@@ -84,6 +84,10 @@ pub fn is_primary_image_segment(path: &Path) -> bool {
     if filename.ends_with(".vhd") || filename.ends_with(".vhdx") {
         return true;
     }
+    // QEMU disks: one file each (an overlay reads its backing file by itself)
+    if filename.ends_with(".qcow2") || filename.ends_with(".qcow") {
+        return true;
+    }
     if filename.ends_with(".dd") || filename.ends_with(".raw") || filename.ends_with(".img") || filename.ends_with(".001") {
         return true;
     }
@@ -104,7 +108,8 @@ pub enum ImageKind {
     Ewf,
     /// VMware virtual disk (descriptor or monolithic sparse extent)
     Vmdk,
-    /// Microsoft virtual disk, VHD (fixed, dynamic, differencing) or VHDX
+    /// A virtual disk opened by [`super::vhd::open_virtual_disk`]: Microsoft VHD
+    /// (fixed, dynamic, differencing) or VHDX, or QEMU QCOW2
     Vhd,
     /// A plain byte-for-byte copy of a disk or a volume
     Raw,
@@ -130,6 +135,9 @@ pub fn image_kind_from_bytes(head: &[u8], tail: &[u8]) -> Option<ImageKind> {
         return Some(ImageKind::Ewf);
     }
     if head.starts_with(b"vhdxfile") || head.starts_with(b"conectix") || tail.starts_with(b"conectix") {
+        return Some(ImageKind::Vhd);
+    }
+    if head.starts_with(super::qcow2::QCOW_MAGIC) {
         return Some(ImageKind::Vhd);
     }
     if head.starts_with(b"KDMV") {
@@ -195,7 +203,7 @@ pub fn image_kind(path: &Path) -> ImageKind {
         ImageKind::Ewf
     } else if lower.ends_with(".vmdk") {
         ImageKind::Vmdk
-    } else if lower.ends_with(".vhd") || lower.ends_with(".vhdx") {
+    } else if lower.ends_with(".vhd") || lower.ends_with(".vhdx") || lower.ends_with(".qcow2") || lower.ends_with(".qcow") {
         ImageKind::Vhd
     } else {
         ImageKind::Raw
@@ -810,7 +818,8 @@ pub fn unpack_disk_image(
     } else if kind == ImageKind::Vhd {
         let (reader, total_size) = super::vhd::open_virtual_disk(&path_str).map_err(|e| {
             let msg = format!("{}: {e}", image_path.display());
-            if e.contains("differencing") {
+            // a disk that needs another file that is not there
+            if e.contains("differencing") || e.contains("backing file") {
                 crate::errors::FaramirError::ImageIncomplete(msg).to_string()
             } else {
                 crate::errors::FaramirError::VhdOpenFailed(msg).to_string()
@@ -818,7 +827,7 @@ pub fn unpack_disk_image(
         })?;
         log_message(
             silent,
-            &format!("  ├─ VHD/VHDX virtual disk capacity: {:.2} GB", total_size as f64 / 1_073_741_824.0),
+            &format!("  ├─ Virtual disk capacity: {:.2} GB", total_size as f64 / 1_073_741_824.0),
         );
         let buf_reader = BufReader::new(reader);
         process_seekable_image(buf_reader, total_size, &out_dir, silent)?;

@@ -28,7 +28,7 @@ fn vhd_footer(size: u64, disk_type: u32, data_offset: u64) -> [u8; 512] {
 
 #[test]
 fn primary_segments() {
-    for p in ["disk.E01", "disk.Ex01", "disk.e01", "vm.vmdk", "vm.vhd", "vm.vhdx", "d.dd", "d.raw", "d.img", "d.001"] {
+    for p in ["disk.E01", "disk.Ex01", "disk.e01", "vm.vmdk", "vm.vhd", "vm.vhdx", "vm-100-disk-0.qcow2", "old.qcow", "d.dd", "d.raw", "d.img", "d.001"] {
         assert!(is_primary_image_segment(Path::new(p)), "{p}");
         assert!(is_supported_image(Path::new(p)), "{p}");
         assert!(!is_secondary_image_segment(Path::new(p)), "{p}");

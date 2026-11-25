@@ -3,6 +3,7 @@ pub mod ext_journal;
 pub mod image;
 pub mod linux_image;
 pub mod triage;
+pub mod qcow2;
 pub mod vhd;
 pub mod vmdk;
 pub mod xfs_image;

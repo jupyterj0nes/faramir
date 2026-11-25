@@ -67,7 +67,7 @@ pub enum FaramirError {
     VssParseError(String),
     /// VMware VMDK descriptor / extent cannot be opened (2015)
     VmdkOpenFailed(String),
-    /// Microsoft VHD / VHDX cannot be opened (2016)
+    /// A virtual disk (Microsoft VHD / VHDX, QEMU QCOW2) cannot be opened (2016)
     VhdOpenFailed(String),
     /// Secondary image segment (.E02, -s002.vmdk, .002) skipped; its first segment carries it (2017)
     ImageSegmentSkipped(String),
@@ -1032,7 +1032,7 @@ impl fmt::Display for FaramirError {
             Self::StagingDirFailed(e) => write!(f, "Cannot initialize staging folder: {}", e),
             Self::VssParseError(e) => write!(f, "VSS parsing failure: {}", e),
             Self::VmdkOpenFailed(e) => write!(f, "Cannot open VMDK: {}", e),
-            Self::VhdOpenFailed(e) => write!(f, "Cannot open VHD/VHDX: {}", e),
+            Self::VhdOpenFailed(e) => write!(f, "Cannot open virtual disk: {}", e),
             Self::ImageSegmentSkipped(p) => write!(f, "Secondary image segment skipped (read through its first segment): {}", p),
             Self::ImageIncomplete(e) => write!(f, "Image is incomplete: {}", e),
             Self::CarveOpenFailed(e) => write!(f, "Cannot open source for carving: {}", e),

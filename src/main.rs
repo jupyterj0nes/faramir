@@ -139,7 +139,7 @@ struct Args {
     #[arg(short = 'd', long = "directory", value_name = "DIR")]
     directory: Vec<String>,
 
-    /// Individual files to process (disk images: .E01, .raw, .dd, .vmdk, .vhd(x), or any file whose content is a disk image, such as a cloud snapshot with no extension; archives: .zip, .tar.gz; hives)
+    /// Individual files to process (disk images: .E01, .raw, .dd, .vmdk, .vhd(x), .qcow2, or any file whose content is a disk image, such as a cloud snapshot with no extension; archives: .zip, .tar.gz; hives)
     #[arg(short = 'f', long = "file", value_name = "FILE")]
     file: Vec<String>,
 
@@ -629,7 +629,7 @@ fn main() -> Result<()> {
     }
     if args.carve && images.is_empty() && !carved_any_file {
         diag::record(faramir::errors::FaramirError::CarveNoTarget(
-            "carving reads disk images (-f image.E01/.vmdk/.vhdx/.raw) or plain files given with -f; directories and triage archives are not carved".into(),
+            "carving reads disk images (-f image.E01/.vmdk/.vhdx/.qcow2/.raw) or plain files given with -f; directories and triage archives are not carved".into(),
         ));
     }
 

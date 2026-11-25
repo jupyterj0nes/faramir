@@ -36,8 +36,50 @@ fn truth(tag: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// A raw disk as a QCOW2 (version 3, 64 KiB clusters, clusters of zeros left
+/// out), under another name: what `qemu-img convert -O qcow2` writes, in its
+/// plainest form.
+fn as_qcow2(d: &TempDir, raw_path: &std::path::Path, name: &str) -> PathBuf {
+    let raw = std::fs::read(raw_path).unwrap();
+    let cs = 65536usize;
+    let clusters = raw.len().div_ceil(cs);
+    let tables = clusters.div_ceil(cs / 8);
+    let mut img = vec![0u8; cs * (2 + tables)];
+    img[..4].copy_from_slice(b"QFI\xfb");
+    img[4..8].copy_from_slice(&3u32.to_be_bytes());
+    img[20..24].copy_from_slice(&16u32.to_be_bytes());
+    img[24..32].copy_from_slice(&(raw.len() as u64).to_be_bytes());
+    img[36..40].copy_from_slice(&(tables as u32).to_be_bytes());
+    img[40..48].copy_from_slice(&(cs as u64).to_be_bytes());
+    img[96..100].copy_from_slice(&4u32.to_be_bytes());
+    img[100..104].copy_from_slice(&104u32.to_be_bytes());
+    for t in 0..tables {
+        img[cs + t * 8..cs + t * 8 + 8].copy_from_slice(&((cs * (2 + t)) as u64).to_be_bytes());
+    }
+    for (i, chunk) in raw.chunks(cs).enumerate() {
+        if chunk.iter().all(|&b| b == 0) {
+            continue;
+        }
+        let at = img.len();
+        img.extend_from_slice(chunk);
+        img.resize(at + cs, 0);
+        let entry = cs * 2 + i * 8;
+        img[entry..entry + 8].copy_from_slice(&(at as u64).to_be_bytes());
+    }
+    std::fs::remove_file(raw_path).unwrap();
+    d.write(name, &img)
+}
+
 fn run_image(d: &TempDir, name: &str) -> (PathBuf, Vec<faramir::event::Event>, String) {
+    run_image_as(d, name, None)
+}
+
+fn run_image_as(d: &TempDir, name: &str, qcow2_name: Option<&str>) -> (PathBuf, Vec<faramir::event::Event>, String) {
     let img = gunzip_fixture(d, name);
+    let img = match qcow2_name {
+        Some(n) => as_qcow2(d, &img, n),
+        None => img,
+    };
     diag::clear();
     let out = unpack_disk_image(&img, &d.mkdir(&format!("stg_{name}")), true).expect("unpack");
     let vols: Vec<PathBuf> = std::fs::read_dir(&out).unwrap().flatten().map(|e| e.path()).filter(|p| p.is_dir() && is_linux_volume_dir(&p.file_name().unwrap().to_string_lossy())).collect();
@@ -160,4 +202,18 @@ fn xfs_is_a_readable_kind_now() {
     let mut v = vec![0u8; 8192];
     v[..4].copy_from_slice(b"XFSB");
     assert_eq!(sniff(&SharedReader::new(Cursor::new(v)), 0), VolumeKind::Xfs);
+}
+
+/// The same disks as QCOW2: one named as Proxmox names them, one with a name
+/// that says nothing (a cloud image), known by its content.
+#[test]
+fn xfs_volumes_inside_a_qcow2_yield_the_same_canaries() {
+    for (name, tag, qcow2_name) in [("gpt_xfs.img", "xfs", "vm-100-disk-0.qcow2"), ("mbr_lvm_xfs.img", "lvmxfs", "b3f1c2d4-image")] {
+        let d = TempDir::new(&format!("xfs_qcow2_{tag}"));
+        let (_, raw_events, _) = run_image(&d, name);
+        let d2 = TempDir::new(&format!("xfs_qcow2b_{tag}"));
+        let (_, events, host) = run_image_as(&d2, name, Some(qcow2_name));
+        check_canaries(tag, &events, &host);
+        assert_eq!(events.len(), raw_events.len(), "{qcow2_name}: as many events as the raw disk");
+    }
 }

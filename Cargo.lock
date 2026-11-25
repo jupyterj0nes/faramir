@@ -806,6 +806,7 @@ dependencies = [
  "vshadow",
  "walkdir",
  "zip",
+ "zstd",
 ]
 
 [[package]]

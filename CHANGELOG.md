@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **QCOW2 disk images are read.** The disks of KVM / libvirt, Proxmox, OpenStack and Nutanix AHV were not known as images. They are now read in place like any other virtual disk, by their content (a cloud image with no extension too): versions 2 and 3, any cluster size, clusters compressed with deflate or zstd, zero clusters, extended L2 entries. An overlay, as a snapshot leaves, holds only the changes: it is read together with its backing file, the whole chain, when the backing file is in the same folder (the path it had on the hypervisor does not matter); without it the image is reported as incomplete. Encrypted images (AES, LUKS), images with an external data file and QCOW version 1 are reported with the reason. Internal snapshots are not read: the disk is its current state.
+
 ## 0.5.4 (2026-11-20)
 
 - **A disk image is recognised by its content, not only by its name.** A cloud snapshot with no extension (an Azure OS disk export, `snap-<host>_os_disk-<date>`) was taken for a hive and gave `ERR_WIN_HIVE_SIGNATURE` and an empty timeline. A file whose name is not an image's is now opened as one when its first 4 KiB or its last 512 bytes say so: EWF, VHD (footer at the start or, fixed, at the end), VHDX and VMDK sparse by their magic; a raw disk or volume by its GPT header, an MBR with a valid partition entry, an NTFS boot sector, an ext or XFS superblock or an LVM label. Files under 64 KiB, hives, event logs and later EWF segments (`.E02`…, which start with the same magic) are never taken for one. The content also chooses the reader, in the image pipeline and in `--carve`: a fixed VHD named `.dd` is read as a VHD, a raw disk named `.vhd` as raw, a VHDX by its magic whatever its name.
